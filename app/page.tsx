@@ -6,6 +6,8 @@ interface Todo {
   id: number;
   text: string;
   completed: boolean;
+  createdAt: Date;
+  completedAt?: Date;
 }
 
 export default function Home() {
@@ -19,6 +21,7 @@ export default function Home() {
       id: Date.now(),
       text: input,
       completed: false,
+      createdAt: new Date(),
     };
 
     setTodos([...todos, newTodo]);
@@ -28,7 +31,13 @@ export default function Home() {
   const toggleTodo = (id: number) => {
     setTodos(
       todos.map((todo) =>
-        todo.id === id ? { ...todo, completed: !todo.completed } : todo
+        todo.id === id
+          ? {
+              ...todo,
+              completed: !todo.completed,
+              completedAt: !todo.completed ? new Date() : undefined,
+            }
+          : todo
       )
     );
   };
@@ -41,6 +50,16 @@ export default function Home() {
     if (e.key === "Enter") {
       addTodo();
     }
+  };
+
+  const formatDate = (date: Date) => {
+    return new Date(date).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
   };
 
   const activeTodos = todos.filter((todo) => !todo.completed);
@@ -89,7 +108,12 @@ export default function Home() {
                         onChange={() => toggleTodo(todo.id)}
                         className="w-5 h-5 text-blue-500 rounded focus:ring-2 focus:ring-blue-500"
                       />
-                      <span className="flex-1 text-gray-800">{todo.text}</span>
+                      <div className="flex-1">
+                        <div className="text-gray-800">{todo.text}</div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          Added {formatDate(todo.createdAt)}
+                        </div>
+                      </div>
                       <button
                         onClick={() => deleteTodo(todo.id)}
                         className="px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
@@ -119,9 +143,14 @@ export default function Home() {
                         onChange={() => toggleTodo(todo.id)}
                         className="w-5 h-5 text-green-500 rounded focus:ring-2 focus:ring-green-500"
                       />
-                      <span className="flex-1 text-gray-500 line-through">
-                        {todo.text}
-                      </span>
+                      <div className="flex-1">
+                        <div className="text-gray-500 line-through">
+                          {todo.text}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          Completed {todo.completedAt && formatDate(todo.completedAt)}
+                        </div>
+                      </div>
                       <button
                         onClick={() => deleteTodo(todo.id)}
                         className="px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
