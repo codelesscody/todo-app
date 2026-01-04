@@ -5,6 +5,8 @@ A simple and elegant todo task manager built with Next.js, React, TypeScript, an
 ## Features
 
 - Add, complete, and delete tasks
+- Task timestamps (created and completed dates)
+- Automatic persistence to markdown file (tasks saved across page reloads)
 - Clean and modern UI with Tailwind CSS
 - Separate sections for active and completed tasks
 - Keyboard support (press Enter to add tasks)

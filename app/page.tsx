@@ -1,18 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Todo {
   id: number;
   text: string;
   completed: boolean;
-  createdAt: Date;
-  completedAt?: Date;
+  createdAt: string;
+  completedAt?: string;
 }
 
 export default function Home() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load todos on mount
+  useEffect(() => {
+    const loadTodos = async () => {
+      try {
+        const response = await fetch("/api/todos");
+        if (response.ok) {
+          const data = await response.json();
+          setTodos(data);
+        }
+      } catch (error) {
+        console.error("Failed to load todos:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTodos();
+  }, []);
+
+  // Save todos whenever they change
+  useEffect(() => {
+    if (isLoading) return; // Don't save during initial load
+
+    const saveTodos = async () => {
+      try {
+        await fetch("/api/todos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(todos),
+        });
+      } catch (error) {
+        console.error("Failed to save todos:", error);
+      }
+    };
+
+    saveTodos();
+  }, [todos, isLoading]);
 
   const addTodo = () => {
     if (input.trim() === "") return;
@@ -21,7 +60,7 @@ export default function Home() {
       id: Date.now(),
       text: input,
       completed: false,
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
     };
 
     setTodos([...todos, newTodo]);
@@ -35,7 +74,7 @@ export default function Home() {
           ? {
               ...todo,
               completed: !todo.completed,
-              completedAt: !todo.completed ? new Date() : undefined,
+              completedAt: !todo.completed ? new Date().toISOString() : undefined,
             }
           : todo
       )
@@ -52,7 +91,7 @@ export default function Home() {
     }
   };
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: string) => {
     return new Date(date).toLocaleString("en-US", {
       month: "short",
       day: "numeric",
