@@ -8,12 +8,17 @@ interface Todo {
   completed: boolean;
   createdAt: string;
   completedAt?: string;
+  pomodoroStartTime?: number;
+  pomodoroDuration?: number; // in milliseconds
+  pomodoroPaused?: boolean;
+  pomodoroTimeRemaining?: number; // in milliseconds
 }
 
 export default function Home() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
   // Load todos on mount
   useEffect(() => {
@@ -53,6 +58,63 @@ export default function Home() {
     saveTodos();
   }, [todos, isLoading]);
 
+  // Update current time every second for timer display
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Check for completed timers and show notifications
+  useEffect(() => {
+    todos.forEach((todo) => {
+      if (
+        todo.pomodoroStartTime &&
+        !todo.pomodoroPaused &&
+        !todo.completed
+      ) {
+        const elapsed = currentTime - todo.pomodoroStartTime;
+        const remaining = (todo.pomodoroDuration || 0) - elapsed;
+
+        if (remaining <= 0 && todo.pomodoroDuration) {
+          // Timer completed - show notification
+          if (Notification.permission === "granted") {
+            new Notification("Pomodoro Complete!", {
+              body: `Time's up for: ${todo.text}`,
+              icon: "/favicon.ico",
+            });
+          }
+
+          // Stop the timer by removing timer data
+          setTodos((prev) =>
+            prev.map((t) =>
+              t.id === todo.id
+                ? {
+                    ...t,
+                    pomodoroStartTime: undefined,
+                    pomodoroDuration: undefined,
+                    pomodoroPaused: undefined,
+                    pomodoroTimeRemaining: undefined,
+                  }
+                : t
+            )
+          );
+        }
+      }
+    });
+  }, [currentTime, todos]);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+  }, []);
+
   const addTodo = () => {
     if (input.trim() === "") return;
 
@@ -83,6 +145,89 @@ export default function Home() {
 
   const deleteTodo = (id: number) => {
     setTodos(todos.filter((todo) => todo.id !== id));
+  };
+
+  const startPomodoro = (id: number) => {
+    setTodos(
+      todos.map((todo) =>
+        todo.id === id
+          ? {
+              ...todo,
+              pomodoroStartTime: Date.now(),
+              pomodoroDuration: 25 * 60 * 1000, // 25 minutes in milliseconds
+              pomodoroPaused: false,
+              pomodoroTimeRemaining: undefined,
+            }
+          : todo
+      )
+    );
+  };
+
+  const pausePomodoro = (id: number) => {
+    setTodos(
+      todos.map((todo) => {
+        if (todo.id === id && todo.pomodoroStartTime) {
+          const elapsed = Date.now() - todo.pomodoroStartTime;
+          const remaining = (todo.pomodoroDuration || 0) - elapsed;
+          return {
+            ...todo,
+            pomodoroPaused: true,
+            pomodoroTimeRemaining: remaining,
+          };
+        }
+        return todo;
+      })
+    );
+  };
+
+  const resumePomodoro = (id: number) => {
+    setTodos(
+      todos.map((todo) => {
+        if (todo.id === id && todo.pomodoroPaused) {
+          return {
+            ...todo,
+            pomodoroStartTime: Date.now(),
+            pomodoroDuration: todo.pomodoroTimeRemaining,
+            pomodoroPaused: false,
+            pomodoroTimeRemaining: undefined,
+          };
+        }
+        return todo;
+      })
+    );
+  };
+
+  const resetPomodoro = (id: number) => {
+    setTodos(
+      todos.map((todo) =>
+        todo.id === id
+          ? {
+              ...todo,
+              pomodoroStartTime: undefined,
+              pomodoroDuration: undefined,
+              pomodoroPaused: undefined,
+              pomodoroTimeRemaining: undefined,
+            }
+          : todo
+      )
+    );
+  };
+
+  const getTimeRemaining = (todo: Todo): number => {
+    if (!todo.pomodoroStartTime || !todo.pomodoroDuration) return 0;
+    if (todo.pomodoroPaused && todo.pomodoroTimeRemaining !== undefined) {
+      return todo.pomodoroTimeRemaining;
+    }
+    const elapsed = currentTime - todo.pomodoroStartTime;
+    const remaining = todo.pomodoroDuration - elapsed;
+    return Math.max(0, remaining);
+  };
+
+  const formatTime = (milliseconds: number): string => {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -136,31 +281,92 @@ export default function Home() {
                   Active Tasks ({activeTodos.length})
                 </h2>
                 <div className="space-y-2">
-                  {activeTodos.map((todo) => (
-                    <div
-                      key={todo.id}
-                      className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={todo.completed}
-                        onChange={() => toggleTodo(todo.id)}
-                        className="w-5 h-5 text-blue-500 rounded focus:ring-2 focus:ring-blue-500"
-                      />
-                      <div className="flex-1">
-                        <div className="text-gray-800">{todo.text}</div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          Added {formatDate(todo.createdAt)}
+                  {activeTodos.map((todo) => {
+                    const hasActiveTimer = todo.pomodoroStartTime && !todo.pomodoroPaused;
+                    const timeRemaining = getTimeRemaining(todo);
+                    const isTimerRunning = hasActiveTimer && timeRemaining > 0;
+
+                    return (
+                      <div
+                        key={todo.id}
+                        className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={todo.completed}
+                            onChange={() => toggleTodo(todo.id)}
+                            className="w-5 h-5 text-blue-500 rounded focus:ring-2 focus:ring-blue-500"
+                          />
+                          <div className="flex-1">
+                            <div className="text-gray-800">{todo.text}</div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Added {formatDate(todo.createdAt)}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => deleteTodo(todo.id)}
+                            className="px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
+
+                        {/* Pomodoro Timer Section */}
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          {!todo.pomodoroStartTime && (
+                            <button
+                              onClick={() => startPomodoro(todo.id)}
+                              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-semibold"
+                            >
+                              Start Pomodoro (25 min)
+                            </button>
+                          )}
+
+                          {(todo.pomodoroStartTime || todo.pomodoroPaused) && (
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`text-2xl font-bold ${
+                                  isTimerRunning
+                                    ? "text-green-600"
+                                    : "text-gray-500"
+                                }`}
+                              >
+                                {formatTime(timeRemaining)}
+                              </div>
+
+                              <div className="flex gap-2">
+                                {isTimerRunning && (
+                                  <button
+                                    onClick={() => pausePomodoro(todo.id)}
+                                    className="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors text-sm"
+                                  >
+                                    Pause
+                                  </button>
+                                )}
+
+                                {todo.pomodoroPaused && (
+                                  <button
+                                    onClick={() => resumePomodoro(todo.id)}
+                                    className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
+                                  >
+                                    Resume
+                                  </button>
+                                )}
+
+                                <button
+                                  onClick={() => resetPomodoro(todo.id)}
+                                  className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors text-sm"
+                                >
+                                  Reset
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <button
-                        onClick={() => deleteTodo(todo.id)}
-                        className="px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

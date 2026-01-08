@@ -10,6 +10,10 @@ interface Todo {
   completed: boolean;
   createdAt: string;
   completedAt?: string;
+  pomodoroStartTime?: number;
+  pomodoroDuration?: number;
+  pomodoroPaused?: boolean;
+  pomodoroTimeRemaining?: number;
 }
 
 // Parse markdown file to todos
@@ -43,6 +47,18 @@ async function parseTodos(): Promise<Todo[]> {
       } else if (line.startsWith("- **Completed:**") && currentTodo) {
         const dateStr = line.replace("- **Completed:**", "").trim();
         currentTodo.completedAt = dateStr;
+      } else if (line.startsWith("- **Pomodoro Start:**") && currentTodo) {
+        const startTime = line.replace("- **Pomodoro Start:**", "").trim();
+        currentTodo.pomodoroStartTime = parseInt(startTime);
+      } else if (line.startsWith("- **Pomodoro Duration:**") && currentTodo) {
+        const duration = line.replace("- **Pomodoro Duration:**", "").trim();
+        currentTodo.pomodoroDuration = parseInt(duration);
+      } else if (line.startsWith("- **Pomodoro Paused:**") && currentTodo) {
+        const paused = line.replace("- **Pomodoro Paused:**", "").trim();
+        currentTodo.pomodoroPaused = paused === "true";
+      } else if (line.startsWith("- **Pomodoro Time Remaining:**") && currentTodo) {
+        const remaining = line.replace("- **Pomodoro Time Remaining:**", "").trim();
+        currentTodo.pomodoroTimeRemaining = parseInt(remaining);
       }
     }
 
@@ -69,7 +85,20 @@ function todosToMarkdown(todos: Todo[]): string {
     markdown += "## Active Tasks\n\n";
     activeTodos.forEach((todo) => {
       markdown += `## [ ] ${todo.text}\n`;
-      markdown += `- **Created:** ${todo.createdAt}\n\n`;
+      markdown += `- **Created:** ${todo.createdAt}\n`;
+      if (todo.pomodoroStartTime) {
+        markdown += `- **Pomodoro Start:** ${todo.pomodoroStartTime}\n`;
+      }
+      if (todo.pomodoroDuration) {
+        markdown += `- **Pomodoro Duration:** ${todo.pomodoroDuration}\n`;
+      }
+      if (todo.pomodoroPaused !== undefined) {
+        markdown += `- **Pomodoro Paused:** ${todo.pomodoroPaused}\n`;
+      }
+      if (todo.pomodoroTimeRemaining) {
+        markdown += `- **Pomodoro Time Remaining:** ${todo.pomodoroTimeRemaining}\n`;
+      }
+      markdown += "\n";
     });
   }
 
