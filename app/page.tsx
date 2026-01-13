@@ -12,6 +12,7 @@ interface Todo {
   pomodoroDuration?: number; // in milliseconds
   pomodoroPaused?: boolean;
   pomodoroTimeRemaining?: number; // in milliseconds
+  pomodoroIsBreak?: boolean; // true if this is a break timer
 }
 
 export default function Home() {
@@ -82,24 +83,41 @@ export default function Home() {
           // Timer completed - play sound and show notification
           playNotificationSound();
 
+          const isBreak = todo.pomodoroIsBreak;
+          const notificationTitle = isBreak ? "Break Complete!" : "Pomodoro Complete!";
+          const notificationBody = isBreak
+            ? `Break finished for: ${todo.text}. Ready to focus?`
+            : `Work session done for: ${todo.text}. Time for a break!`;
+
           if (Notification.permission === "granted") {
-            new Notification("Pomodoro Complete!", {
-              body: `Time's up for: ${todo.text}`,
+            new Notification(notificationTitle, {
+              body: notificationBody,
               icon: "/favicon.ico",
             });
           }
 
-          // Stop the timer by removing timer data
+          // If work timer completed, start break timer automatically
+          // If break timer completed, just stop the timer
           setTodos((prev) =>
             prev.map((t) =>
               t.id === todo.id
-                ? {
-                    ...t,
-                    pomodoroStartTime: undefined,
-                    pomodoroDuration: undefined,
-                    pomodoroPaused: undefined,
-                    pomodoroTimeRemaining: undefined,
-                  }
+                ? isBreak
+                  ? {
+                      ...t,
+                      pomodoroStartTime: undefined,
+                      pomodoroDuration: undefined,
+                      pomodoroPaused: undefined,
+                      pomodoroTimeRemaining: undefined,
+                      pomodoroIsBreak: undefined,
+                    }
+                  : {
+                      ...t,
+                      pomodoroStartTime: Date.now(),
+                      pomodoroDuration: 5 * 60 * 1000, // 5 minutes break
+                      pomodoroPaused: false,
+                      pomodoroTimeRemaining: undefined,
+                      pomodoroIsBreak: true,
+                    }
                 : t
             )
           );
@@ -159,6 +177,7 @@ export default function Home() {
               pomodoroDuration: 25 * 60 * 1000, // 25 minutes in milliseconds
               pomodoroPaused: false,
               pomodoroTimeRemaining: undefined,
+              pomodoroIsBreak: false,
             }
           : todo
       )
@@ -209,6 +228,7 @@ export default function Home() {
               pomodoroDuration: undefined,
               pomodoroPaused: undefined,
               pomodoroTimeRemaining: undefined,
+              pomodoroIsBreak: undefined,
             }
           : todo
       )
@@ -313,6 +333,7 @@ export default function Home() {
                     const hasActiveTimer = todo.pomodoroStartTime && !todo.pomodoroPaused;
                     const timeRemaining = getTimeRemaining(todo);
                     const isTimerRunning = hasActiveTimer && timeRemaining > 0;
+                    const isBreak = todo.pomodoroIsBreak;
 
                     return (
                       <div
@@ -352,18 +373,30 @@ export default function Home() {
                           )}
 
                           {(todo.pomodoroStartTime || todo.pomodoroPaused) && (
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={`text-2xl font-bold ${
-                                  isTimerRunning
-                                    ? "text-green-600"
-                                    : "text-gray-500"
-                                }`}
-                              >
-                                {formatTime(timeRemaining)}
-                              </div>
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-3">
+                                <div className="flex flex-col">
+                                  <span
+                                    className={`text-xs font-semibold uppercase tracking-wide ${
+                                      isBreak ? "text-blue-600" : "text-green-600"
+                                    }`}
+                                  >
+                                    {isBreak ? "Break Time" : "Focus Time"}
+                                  </span>
+                                  <div
+                                    className={`text-2xl font-bold ${
+                                      isTimerRunning
+                                        ? isBreak
+                                          ? "text-blue-600"
+                                          : "text-green-600"
+                                        : "text-gray-500"
+                                    }`}
+                                  >
+                                    {formatTime(timeRemaining)}
+                                  </div>
+                                </div>
 
-                              <div className="flex gap-2">
+                                <div className="flex gap-2">
                                 {isTimerRunning && (
                                   <button
                                     onClick={() => pausePomodoro(todo.id)}
@@ -388,6 +421,7 @@ export default function Home() {
                                 >
                                   Reset
                                 </button>
+                              </div>
                               </div>
                             </div>
                           )}

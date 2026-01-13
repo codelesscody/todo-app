@@ -14,6 +14,7 @@ interface Todo {
   pomodoroDuration?: number;
   pomodoroPaused?: boolean;
   pomodoroTimeRemaining?: number;
+  pomodoroIsBreak?: boolean;
 }
 
 // Parse markdown file to todos
@@ -59,6 +60,9 @@ async function parseTodos(): Promise<Todo[]> {
       } else if (line.startsWith("- **Pomodoro Time Remaining:**") && currentTodo) {
         const remaining = line.replace("- **Pomodoro Time Remaining:**", "").trim();
         currentTodo.pomodoroTimeRemaining = parseInt(remaining);
+      } else if (line.startsWith("- **Pomodoro Is Break:**") && currentTodo) {
+        const isBreak = line.replace("- **Pomodoro Is Break:**", "").trim();
+        currentTodo.pomodoroIsBreak = isBreak === "true";
       }
     }
 
@@ -97,6 +101,9 @@ function todosToMarkdown(todos: Todo[]): string {
       }
       if (todo.pomodoroTimeRemaining) {
         markdown += `- **Pomodoro Time Remaining:** ${todo.pomodoroTimeRemaining}\n`;
+      }
+      if (todo.pomodoroIsBreak !== undefined) {
+        markdown += `- **Pomodoro Is Break:** ${todo.pomodoroIsBreak}\n`;
       }
       markdown += "\n";
     });
