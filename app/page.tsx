@@ -20,6 +20,8 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
 
   // Load todos on mount
   useEffect(() => {
@@ -165,6 +167,28 @@ export default function Home() {
 
   const deleteTodo = (id: number) => {
     setTodos(todos.filter((todo) => todo.id !== id));
+  };
+
+  const startEditing = (id: number, text: string) => {
+    setEditingId(id);
+    setEditText(text);
+  };
+
+  const saveEdit = (id: number) => {
+    if (editText.trim() === "") return;
+
+    setTodos(
+      todos.map((todo) =>
+        todo.id === id ? { ...todo, text: editText } : todo
+      )
+    );
+    setEditingId(null);
+    setEditText("");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditText("");
   };
 
   const startPomodoro = (id: number) => {
@@ -348,17 +372,57 @@ export default function Home() {
                             className="w-5 h-5 text-blue-500 rounded focus:ring-2 focus:ring-blue-500"
                           />
                           <div className="flex-1">
-                            <div className="text-gray-800">{todo.text}</div>
-                            <div className="text-xs text-gray-400 mt-1">
-                              Added {formatDate(todo.createdAt)}
-                            </div>
+                            {editingId === todo.id ? (
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={editText}
+                                  onChange={(e) => setEditText(e.target.value)}
+                                  onKeyPress={(e) => {
+                                    if (e.key === "Enter") saveEdit(todo.id);
+                                    if (e.key === "Escape") cancelEdit();
+                                  }}
+                                  className="flex-1 px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => saveEdit(todo.id)}
+                                  className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={cancelEdit}
+                                  className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="text-gray-800">{todo.text}</div>
+                                <div className="text-xs text-gray-400 mt-1">
+                                  Added {formatDate(todo.createdAt)}
+                                </div>
+                              </>
+                            )}
                           </div>
-                          <button
-                            onClick={() => deleteTodo(todo.id)}
-                            className="px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
-                          >
-                            Delete
-                          </button>
+                          {editingId !== todo.id && (
+                            <>
+                              <button
+                                onClick={() => startEditing(todo.id, todo.text)}
+                                className="px-3 py-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => deleteTodo(todo.id)}
+                                className="px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
                         </div>
 
                         {/* Pomodoro Timer Section */}
@@ -451,19 +515,59 @@ export default function Home() {
                         className="w-5 h-5 text-green-500 rounded focus:ring-2 focus:ring-green-500"
                       />
                       <div className="flex-1">
-                        <div className="text-gray-500 line-through">
-                          {todo.text}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          Completed {todo.completedAt && formatDate(todo.completedAt)}
-                        </div>
+                        {editingId === todo.id ? (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={editText}
+                              onChange={(e) => setEditText(e.target.value)}
+                              onKeyPress={(e) => {
+                                if (e.key === "Enter") saveEdit(todo.id);
+                                if (e.key === "Escape") cancelEdit();
+                              }}
+                              className="flex-1 px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => saveEdit(todo.id)}
+                              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="text-gray-500 line-through">
+                              {todo.text}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Completed {todo.completedAt && formatDate(todo.completedAt)}
+                            </div>
+                          </>
+                        )}
                       </div>
-                      <button
-                        onClick={() => deleteTodo(todo.id)}
-                        className="px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
-                      >
-                        Delete
-                      </button>
+                      {editingId !== todo.id && (
+                        <>
+                          <button
+                            onClick={() => startEditing(todo.id, todo.text)}
+                            className="px-3 py-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => deleteTodo(todo.id)}
+                            className="px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
