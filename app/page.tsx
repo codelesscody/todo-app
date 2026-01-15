@@ -13,6 +13,7 @@ interface Todo {
   pomodoroPaused?: boolean;
   pomodoroTimeRemaining?: number; // in milliseconds
   pomodoroIsBreak?: boolean; // true if this is a break timer
+  pomodoroCount?: number; // number of completed pomodoros (0-3, resets to 0 after long break)
 }
 
 export default function Home() {
@@ -86,10 +87,20 @@ export default function Home() {
           playNotificationSound();
 
           const isBreak = todo.pomodoroIsBreak;
-          const notificationTitle = isBreak ? "Break Complete!" : "Pomodoro Complete!";
-          const notificationBody = isBreak
-            ? `Break finished for: ${todo.text}. Ready to focus?`
-            : `Work session done for: ${todo.text}. Time for a break!`;
+          const currentCount = todo.pomodoroCount || 0;
+          const isLongBreak = currentCount === 3;
+
+          let notificationTitle = "Pomodoro Complete!";
+          let notificationBody = `Work session done for: ${todo.text}. Time for a break!`;
+
+          if (isBreak) {
+            notificationTitle = "Break Complete!";
+            notificationBody = `Break finished for: ${todo.text}. Ready to focus?`;
+          } else if (isLongBreak) {
+            notificationBody = `Great work! You've completed 4 pomodoros for: ${todo.text}. Enjoy a 15-minute long break!`;
+          } else {
+            notificationBody = `Work session done for: ${todo.text}. Take a 5-minute break!`;
+          }
 
           if (Notification.permission === "granted") {
             new Notification(notificationTitle, {
@@ -101,27 +112,38 @@ export default function Home() {
           // If work timer completed, start break timer automatically
           // If break timer completed, just stop the timer
           setTodos((prev) =>
-            prev.map((t) =>
-              t.id === todo.id
-                ? isBreak
-                  ? {
-                      ...t,
-                      pomodoroStartTime: undefined,
-                      pomodoroDuration: undefined,
-                      pomodoroPaused: undefined,
-                      pomodoroTimeRemaining: undefined,
-                      pomodoroIsBreak: undefined,
-                    }
-                  : {
-                      ...t,
-                      pomodoroStartTime: Date.now(),
-                      pomodoroDuration: 5 * 60 * 1000, // 5 minutes break
-                      pomodoroPaused: false,
-                      pomodoroTimeRemaining: undefined,
-                      pomodoroIsBreak: true,
-                    }
-                : t
-            )
+            prev.map((t) => {
+              if (t.id === todo.id) {
+                if (isBreak) {
+                  // Break finished - stop timer
+                  return {
+                    ...t,
+                    pomodoroStartTime: undefined,
+                    pomodoroDuration: undefined,
+                    pomodoroPaused: undefined,
+                    pomodoroTimeRemaining: undefined,
+                    pomodoroIsBreak: undefined,
+                  };
+                } else {
+                  // Work session finished - start break
+                  const currentCount = t.pomodoroCount || 0;
+                  const isLongBreak = currentCount === 3; // 4th pomodoro completed
+                  const breakDuration = isLongBreak ? 15 * 60 * 1000 : 5 * 60 * 1000;
+                  const newCount = isLongBreak ? 0 : currentCount + 1;
+
+                  return {
+                    ...t,
+                    pomodoroStartTime: Date.now(),
+                    pomodoroDuration: breakDuration,
+                    pomodoroPaused: false,
+                    pomodoroTimeRemaining: undefined,
+                    pomodoroIsBreak: true,
+                    pomodoroCount: newCount,
+                  };
+                }
+              }
+              return t;
+            })
           );
         }
       }
@@ -202,6 +224,7 @@ export default function Home() {
               pomodoroPaused: false,
               pomodoroTimeRemaining: undefined,
               pomodoroIsBreak: false,
+              pomodoroCount: todo.pomodoroCount ?? 0, // Initialize to 0 if undefined
             }
           : todo
       )
@@ -253,6 +276,7 @@ export default function Home() {
               pomodoroPaused: undefined,
               pomodoroTimeRemaining: undefined,
               pomodoroIsBreak: undefined,
+              pomodoroCount: 0, // Reset cycle count
             }
           : todo
       )
@@ -428,25 +452,39 @@ export default function Home() {
                         {/* Pomodoro Timer Section */}
                         <div className="mt-3 pt-3 border-t border-gray-200">
                           {!todo.pomodoroStartTime && (
-                            <button
-                              onClick={() => startPomodoro(todo.id)}
-                              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-semibold"
-                            >
-                              Start Pomodoro (25 min)
-                            </button>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => startPomodoro(todo.id)}
+                                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-semibold"
+                              >
+                                Start Pomodoro (25 min)
+                              </button>
+                              {(todo.pomodoroCount !== undefined && todo.pomodoroCount > 0) && (
+                                <span className="text-xs text-gray-500 font-medium">
+                                  Cycle {todo.pomodoroCount}/4
+                                </span>
+                              )}
+                            </div>
                           )}
 
                           {(todo.pomodoroStartTime || todo.pomodoroPaused) && (
                             <div className="flex flex-col gap-2">
                               <div className="flex items-center gap-3">
                                 <div className="flex flex-col">
-                                  <span
-                                    className={`text-xs font-semibold uppercase tracking-wide ${
-                                      isBreak ? "text-blue-600" : "text-green-600"
-                                    }`}
-                                  >
-                                    {isBreak ? "Break Time" : "Focus Time"}
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`text-xs font-semibold uppercase tracking-wide ${
+                                        isBreak ? "text-blue-600" : "text-green-600"
+                                      }`}
+                                    >
+                                      {isBreak ? "Break Time" : "Focus Time"}
+                                    </span>
+                                    {!isBreak && todo.pomodoroCount !== undefined && (
+                                      <span className="text-xs text-gray-500 font-medium">
+                                        • Cycle {todo.pomodoroCount + 1}/4
+                                      </span>
+                                    )}
+                                  </div>
                                   <div
                                     className={`text-2xl font-bold ${
                                       isTimerRunning
