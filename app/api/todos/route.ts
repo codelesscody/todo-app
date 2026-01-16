@@ -4,6 +4,8 @@ import path from "path";
 
 const TODOS_FILE = path.join(process.cwd(), "todos.md");
 
+type Priority = "high" | "medium" | "low";
+
 interface Todo {
   id: number;
   text: string;
@@ -16,6 +18,9 @@ interface Todo {
   pomodoroTimeRemaining?: number;
   pomodoroIsBreak?: boolean;
   pomodoroCount?: number;
+  dueDate?: string;
+  priority?: Priority;
+  order?: number;
 }
 
 // Parse markdown file to todos
@@ -67,6 +72,12 @@ async function parseTodos(): Promise<Todo[]> {
       } else if (line.startsWith("- **Pomodoro Count:**") && currentTodo) {
         const count = line.replace("- **Pomodoro Count:**", "").trim();
         currentTodo.pomodoroCount = parseInt(count);
+      } else if (line.startsWith("- **Due Date:**") && currentTodo) {
+        currentTodo.dueDate = line.replace("- **Due Date:**", "").trim();
+      } else if (line.startsWith("- **Priority:**") && currentTodo) {
+        currentTodo.priority = line.replace("- **Priority:**", "").trim() as Priority;
+      } else if (line.startsWith("- **Order:**") && currentTodo) {
+        currentTodo.order = parseInt(line.replace("- **Order:**", "").trim());
       }
     }
 
@@ -111,6 +122,15 @@ function todosToMarkdown(todos: Todo[]): string {
       }
       if (todo.pomodoroCount !== undefined) {
         markdown += `- **Pomodoro Count:** ${todo.pomodoroCount}\n`;
+      }
+      if (todo.dueDate) {
+        markdown += `- **Due Date:** ${todo.dueDate}\n`;
+      }
+      if (todo.priority) {
+        markdown += `- **Priority:** ${todo.priority}\n`;
+      }
+      if (todo.order !== undefined) {
+        markdown += `- **Order:** ${todo.order}\n`;
       }
       markdown += "\n";
     });

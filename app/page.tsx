@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 
+type Priority = "high" | "medium" | "low";
+
 interface Todo {
   id: number;
   text: string;
@@ -14,6 +16,9 @@ interface Todo {
   pomodoroTimeRemaining?: number; // in milliseconds
   pomodoroIsBreak?: boolean; // true if this is a break timer
   pomodoroCount?: number; // number of completed pomodoros (0-3, resets to 0 after long break)
+  dueDate?: string; // ISO date string
+  priority?: Priority;
+  order?: number; // for drag & drop ordering
 }
 
 export default function Home() {
@@ -23,6 +28,23 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
+  const [newDueDate, setNewDueDate] = useState("");
+  const [newPriority, setNewPriority] = useState<Priority | "">("");
+  const [draggedId, setDraggedId] = useState<number | null>(null);
+
+  // Load dark mode preference on mount
+  useEffect(() => {
+    const savedDarkMode = localStorage.getItem("darkMode");
+    if (savedDarkMode === "true") {
+      setDarkMode(true);
+    }
+  }, []);
+
+  // Save dark mode preference
+  useEffect(() => {
+    localStorage.setItem("darkMode", darkMode.toString());
+  }, [darkMode]);
 
   // Load todos on mount
   useEffect(() => {
@@ -162,15 +184,21 @@ export default function Home() {
   const addTodo = () => {
     if (input.trim() === "") return;
 
+    const maxOrder = Math.max(0, ...todos.map((t) => t.order ?? 0));
     const newTodo: Todo = {
       id: Date.now(),
       text: input,
       completed: false,
       createdAt: new Date().toISOString(),
+      dueDate: newDueDate || undefined,
+      priority: newPriority || undefined,
+      order: maxOrder + 1,
     };
 
     setTodos([...todos, newTodo]);
     setInput("");
+    setNewDueDate("");
+    setNewPriority("");
   };
 
   const toggleTodo = (id: number) => {
@@ -342,38 +370,138 @@ export default function Home() {
     });
   };
 
-  const activeTodos = todos.filter((todo) => !todo.completed);
+  const formatDueDate = (date: string) => {
+    const dueDate = new Date(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dueDateOnly = new Date(dueDate);
+    dueDateOnly.setHours(0, 0, 0, 0);
+
+    if (dueDateOnly.getTime() === today.getTime()) return "Today";
+    if (dueDateOnly.getTime() === tomorrow.getTime()) return "Tomorrow";
+    return dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  const isOverdue = (date: string) => {
+    const dueDate = new Date(date);
+    dueDate.setHours(23, 59, 59, 999);
+    return dueDate < new Date();
+  };
+
+  const getPriorityColor = (priority: Priority, isDark: boolean) => {
+    const colors = {
+      high: isDark ? "text-red-400" : "text-red-600",
+      medium: isDark ? "text-yellow-400" : "text-yellow-600",
+      low: isDark ? "text-blue-400" : "text-blue-600",
+    };
+    return colors[priority];
+  };
+
+  const getPriorityBg = (priority: Priority, isDark: boolean) => {
+    const colors = {
+      high: isDark ? "bg-red-900/30" : "bg-red-50",
+      medium: isDark ? "bg-yellow-900/30" : "bg-yellow-50",
+      low: isDark ? "bg-blue-900/30" : "bg-blue-50",
+    };
+    return colors[priority];
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (id: number) => {
+    setDraggedId(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    if (draggedId === null || draggedId === targetId) return;
+
+    const draggedIndex = todos.findIndex((t) => t.id === draggedId);
+    const targetIndex = todos.findIndex((t) => t.id === targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newTodos = [...todos];
+    const [draggedTodo] = newTodos.splice(draggedIndex, 1);
+    newTodos.splice(targetIndex, 0, draggedTodo);
+
+    // Update order values
+    const reorderedTodos = newTodos.map((todo, index) => ({
+      ...todo,
+      order: index,
+    }));
+
+    setTodos(reorderedTodos);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+  };
+
+  const activeTodos = todos
+    .filter((todo) => !todo.completed)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const completedTodos = todos.filter((todo) => todo.completed);
 
   return (
-    <div className="min-h-screen py-12 px-4">
+    <div className={`min-h-screen py-12 px-4 transition-colors ${darkMode ? "bg-gray-900" : "bg-gray-100"}`}>
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">
-            Todo List
-          </h1>
-
-          <div className="flex gap-2 mb-8">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Add a new task..."
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+        <div className={`rounded-2xl shadow-xl p-8 transition-colors ${darkMode ? "bg-gray-800" : "bg-white"}`}>
+          <div className="flex justify-between items-center mb-8">
+            <h1 className={`text-4xl font-bold ${darkMode ? "text-white" : "text-gray-800"}`}>
+              Todo List
+            </h1>
             <button
-              onClick={addTodo}
-              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-semibold"
+              onClick={() => setDarkMode(!darkMode)}
+              className={`p-2 rounded-lg transition-colors ${darkMode ? "bg-gray-700 hover:bg-gray-600 text-yellow-400" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
+              title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
             >
-              Add
+              {darkMode ? "☀️" : "🌙"}
             </button>
+          </div>
+
+          <div className="space-y-3 mb-8">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Add a new task..."
+                className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400" : "border-gray-300"}`}
+              />
+              <button
+                onClick={addTodo}
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-semibold"
+              >
+                Add
+              </button>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <input
+                type="date"
+                value={newDueDate}
+                onChange={(e) => setNewDueDate(e.target.value)}
+                className={`px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white" : "border-gray-300"}`}
+              />
+              <select
+                value={newPriority}
+                onChange={(e) => setNewPriority(e.target.value as Priority | "")}
+                className={`px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white" : "border-gray-300"}`}
+              >
+                <option value="">No priority</option>
+                <option value="high">High priority</option>
+                <option value="medium">Medium priority</option>
+                <option value="low">Low priority</option>
+              </select>
+            </div>
           </div>
 
           <div className="space-y-6">
             {activeTodos.length > 0 && (
               <div>
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                <h2 className={`text-sm font-semibold uppercase tracking-wide mb-3 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
                   Active Tasks ({activeTodos.length})
                 </h2>
                 <div className="space-y-2">
@@ -382,13 +510,27 @@ export default function Home() {
                     const timeRemaining = getTimeRemaining(todo);
                     const isTimerRunning = hasActiveTimer && timeRemaining > 0;
                     const isBreak = todo.pomodoroIsBreak;
+                    const overdue = todo.dueDate && isOverdue(todo.dueDate) && !todo.completed;
 
                     return (
                       <div
                         key={todo.id}
-                        className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                        draggable
+                        onDragStart={() => handleDragStart(todo.id)}
+                        onDragOver={(e) => handleDragOver(e, todo.id)}
+                        onDragEnd={handleDragEnd}
+                        className={`p-4 rounded-lg transition-colors cursor-grab active:cursor-grabbing ${
+                          draggedId === todo.id ? "opacity-50" : ""
+                        } ${
+                          todo.priority
+                            ? getPriorityBg(todo.priority, darkMode)
+                            : darkMode
+                            ? "bg-gray-700 hover:bg-gray-600"
+                            : "bg-gray-50 hover:bg-gray-100"
+                        }`}
                       >
                         <div className="flex items-center gap-3">
+                          <div className={`cursor-grab ${darkMode ? "text-gray-500" : "text-gray-400"}`}>⋮⋮</div>
                           <input
                             type="checkbox"
                             checked={todo.completed}
@@ -406,7 +548,7 @@ export default function Home() {
                                     if (e.key === "Enter") saveEdit(todo.id);
                                     if (e.key === "Escape") cancelEdit();
                                   }}
-                                  className="flex-1 px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  className={`flex-1 px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${darkMode ? "bg-gray-600 text-white" : ""}`}
                                   autoFocus
                                 />
                                 <button
@@ -424,9 +566,21 @@ export default function Home() {
                               </div>
                             ) : (
                               <>
-                                <div className="text-gray-800">{todo.text}</div>
-                                <div className="text-xs text-gray-400 mt-1">
-                                  Added {formatDate(todo.createdAt)}
+                                <div className="flex items-center gap-2">
+                                  <span className={darkMode ? "text-white" : "text-gray-800"}>{todo.text}</span>
+                                  {todo.priority && (
+                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${getPriorityColor(todo.priority, darkMode)}`}>
+                                      {todo.priority.toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className={`text-xs mt-1 flex items-center gap-2 ${darkMode ? "text-gray-400" : "text-gray-400"}`}>
+                                  <span>Added {formatDate(todo.createdAt)}</span>
+                                  {todo.dueDate && (
+                                    <span className={`font-medium ${overdue ? "text-red-500" : darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                                      • Due: {formatDueDate(todo.dueDate)} {overdue && "(Overdue!)"}
+                                    </span>
+                                  )}
                                 </div>
                               </>
                             )}
@@ -435,13 +589,13 @@ export default function Home() {
                             <>
                               <button
                                 onClick={() => startEditing(todo.id, todo.text)}
-                                className="px-3 py-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                                className={`px-3 py-1 rounded transition-colors ${darkMode ? "text-blue-400 hover:bg-gray-600" : "text-blue-500 hover:bg-blue-50"}`}
                               >
                                 Edit
                               </button>
                               <button
                                 onClick={() => deleteTodo(todo.id)}
-                                className="px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                className={`px-3 py-1 rounded transition-colors ${darkMode ? "text-red-400 hover:bg-gray-600" : "text-red-500 hover:bg-red-50"}`}
                               >
                                 Delete
                               </button>
@@ -450,7 +604,7 @@ export default function Home() {
                         </div>
 
                         {/* Pomodoro Timer Section */}
-                        <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className={`mt-3 pt-3 border-t ${darkMode ? "border-gray-600" : "border-gray-200"}`}>
                           {!todo.pomodoroStartTime && (
                             <div className="flex items-center gap-3">
                               <button
@@ -460,7 +614,7 @@ export default function Home() {
                                 Start Pomodoro (25 min)
                               </button>
                               {(todo.pomodoroCount !== undefined && todo.pomodoroCount > 0) && (
-                                <span className="text-xs text-gray-500 font-medium">
+                                <span className={`text-xs font-medium ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
                                   Cycle {todo.pomodoroCount}/4
                                 </span>
                               )}
@@ -480,7 +634,7 @@ export default function Home() {
                                       {isBreak ? "Break Time" : "Focus Time"}
                                     </span>
                                     {!isBreak && todo.pomodoroCount !== undefined && (
-                                      <span className="text-xs text-gray-500 font-medium">
+                                      <span className={`text-xs font-medium ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
                                         • Cycle {todo.pomodoroCount + 1}/4
                                       </span>
                                     )}
@@ -537,14 +691,14 @@ export default function Home() {
 
             {completedTodos.length > 0 && (
               <div>
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                <h2 className={`text-sm font-semibold uppercase tracking-wide mb-3 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
                   Completed Tasks ({completedTodos.length})
                 </h2>
                 <div className="space-y-2">
                   {completedTodos.map((todo) => (
                     <div
                       key={todo.id}
-                      className="flex items-center gap-3 p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+                      className={`flex items-center gap-3 p-4 rounded-lg transition-colors ${darkMode ? "bg-green-900/30 hover:bg-green-900/40" : "bg-green-50 hover:bg-green-100"}`}
                     >
                       <input
                         type="checkbox"
@@ -563,7 +717,7 @@ export default function Home() {
                                 if (e.key === "Enter") saveEdit(todo.id);
                                 if (e.key === "Escape") cancelEdit();
                               }}
-                              className="flex-1 px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className={`flex-1 px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${darkMode ? "bg-gray-600 text-white" : ""}`}
                               autoFocus
                             />
                             <button
@@ -581,10 +735,10 @@ export default function Home() {
                           </div>
                         ) : (
                           <>
-                            <div className="text-gray-500 line-through">
+                            <div className={`line-through ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
                               {todo.text}
                             </div>
-                            <div className="text-xs text-gray-400 mt-1">
+                            <div className={`text-xs mt-1 ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
                               Completed {todo.completedAt && formatDate(todo.completedAt)}
                             </div>
                           </>
@@ -594,13 +748,13 @@ export default function Home() {
                         <>
                           <button
                             onClick={() => startEditing(todo.id, todo.text)}
-                            className="px-3 py-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                            className={`px-3 py-1 rounded transition-colors ${darkMode ? "text-blue-400 hover:bg-gray-600" : "text-blue-500 hover:bg-blue-50"}`}
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => deleteTodo(todo.id)}
-                            className="px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                            className={`px-3 py-1 rounded transition-colors ${darkMode ? "text-red-400 hover:bg-gray-600" : "text-red-500 hover:bg-red-50"}`}
                           >
                             Delete
                           </button>
@@ -613,7 +767,7 @@ export default function Home() {
             )}
 
             {todos.length === 0 && (
-              <div className="text-center py-12 text-gray-400">
+              <div className={`text-center py-12 ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
                 <p className="text-lg">No tasks yet. Add one above to get started!</p>
               </div>
             )}
