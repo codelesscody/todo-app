@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 type Priority = "high" | "medium" | "low";
 type RecurringType = "daily" | "weekly" | "monthly";
@@ -53,6 +53,7 @@ export default function Home() {
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [subtaskInput, setSubtaskInput] = useState<{ [key: number]: string }>({});
   const [showExportModal, setShowExportModal] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   // Load dark mode preference on mount
   useEffect(() => {
@@ -69,12 +70,21 @@ export default function Home() {
 
   // Load todos on mount
   useEffect(() => {
+    // Prevent double-loading in React Strict Mode
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
+
     const loadTodos = async () => {
       try {
         const response = await fetch("/api/todos");
         if (response.ok) {
           const data = await response.json();
-          setTodos(data);
+          // Deduplicate by ID just in case
+          const uniqueTodos = data.filter(
+            (todo: Todo, index: number, self: Todo[]) =>
+              index === self.findIndex((t) => t.id === todo.id)
+          );
+          setTodos(uniqueTodos);
         }
       } catch (error) {
         console.error("Failed to load todos:", error);
@@ -92,10 +102,15 @@ export default function Home() {
 
     const saveTodos = async () => {
       try {
+        // Deduplicate by ID before saving
+        const uniqueTodos = todos.filter(
+          (todo, index, self) =>
+            index === self.findIndex((t) => t.id === todo.id)
+        );
         await fetch("/api/todos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(todos),
+          body: JSON.stringify(uniqueTodos),
         });
       } catch (error) {
         console.error("Failed to save todos:", error);
