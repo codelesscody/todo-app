@@ -29,8 +29,8 @@ export default function Home() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [darkMode, setDarkMode] = useState(false);
-  const [newDueDate, setNewDueDate] = useState("");
-  const [newPriority, setNewPriority] = useState<Priority | "">("");
+  const [newDueDate, setNewDueDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [newPriority, setNewPriority] = useState<Priority>("medium");
   const [draggedId, setDraggedId] = useState<number | null>(null);
 
   // Load dark mode preference on mount
@@ -197,8 +197,8 @@ export default function Home() {
 
     setTodos([...todos, newTodo]);
     setInput("");
-    setNewDueDate("");
-    setNewPriority("");
+    setNewDueDate(new Date().toISOString().split("T")[0]);
+    setNewPriority("medium");
   };
 
   const toggleTodo = (id: number) => {
