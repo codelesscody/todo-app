@@ -3,6 +3,13 @@
 import { useState, useEffect } from "react";
 
 type Priority = "high" | "medium" | "low";
+type RecurringType = "daily" | "weekly" | "monthly";
+
+interface Subtask {
+  id: number;
+  text: string;
+  completed: boolean;
+}
 
 interface Todo {
   id: number;
@@ -19,7 +26,12 @@ interface Todo {
   dueDate?: string; // ISO date string
   priority?: Priority;
   order?: number; // for drag & drop ordering
+  category?: string; // e.g., "work", "home", "personal"
+  subtasks?: Subtask[];
+  recurring?: RecurringType;
 }
+
+const CATEGORIES = ["work", "home", "personal", "learning", "health"];
 
 export default function Home() {
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -32,6 +44,12 @@ export default function Home() {
   const [newDueDate, setNewDueDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [newPriority, setNewPriority] = useState<Priority>("medium");
   const [draggedId, setDraggedId] = useState<number | null>(null);
+  const [newCategory, setNewCategory] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [newRecurring, setNewRecurring] = useState<RecurringType | "">("");
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [subtaskInput, setSubtaskInput] = useState<{ [key: number]: string }>({});
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Load dark mode preference on mount
   useEffect(() => {
@@ -181,6 +199,91 @@ export default function Home() {
     }
   }, []);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT") {
+        return;
+      }
+
+      const activeList = todos.filter((t) => !t.completed).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      // Ctrl+N or N: Focus new task input
+      if (e.key === "n" || (e.ctrlKey && e.key === "n")) {
+        e.preventDefault();
+        document.getElementById("new-task-input")?.focus();
+        return;
+      }
+
+      // Arrow keys: Navigate tasks
+      if (e.key === "ArrowDown" || e.key === "j") {
+        e.preventDefault();
+        const currentIndex = activeList.findIndex((t) => t.id === selectedTaskId);
+        const nextIndex = currentIndex < activeList.length - 1 ? currentIndex + 1 : 0;
+        setSelectedTaskId(activeList[nextIndex]?.id ?? null);
+        return;
+      }
+
+      if (e.key === "ArrowUp" || e.key === "k") {
+        e.preventDefault();
+        const currentIndex = activeList.findIndex((t) => t.id === selectedTaskId);
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : activeList.length - 1;
+        setSelectedTaskId(activeList[prevIndex]?.id ?? null);
+        return;
+      }
+
+      // Space: Start/pause timer on selected task
+      if (e.key === " " && selectedTaskId) {
+        e.preventDefault();
+        const todo = todos.find((t) => t.id === selectedTaskId);
+        if (todo) {
+          if (todo.pomodoroStartTime && !todo.pomodoroPaused) {
+            pausePomodoro(selectedTaskId);
+          } else if (todo.pomodoroPaused) {
+            resumePomodoro(selectedTaskId);
+          } else {
+            startPomodoro(selectedTaskId);
+          }
+        }
+        return;
+      }
+
+      // Enter: Complete selected task
+      if (e.key === "Enter" && selectedTaskId) {
+        e.preventDefault();
+        toggleTodo(selectedTaskId);
+        return;
+      }
+
+      // Delete or Backspace: Delete selected task
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedTaskId) {
+        e.preventDefault();
+        deleteTodo(selectedTaskId);
+        setSelectedTaskId(null);
+        return;
+      }
+
+      // Escape: Deselect
+      if (e.key === "Escape") {
+        setSelectedTaskId(null);
+        setShowExportModal(false);
+        return;
+      }
+
+      // E: Export modal
+      if (e.key === "e") {
+        e.preventDefault();
+        setShowExportModal(true);
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [todos, selectedTaskId]);
+
   const addTodo = () => {
     if (input.trim() === "") return;
 
@@ -193,30 +296,130 @@ export default function Home() {
       dueDate: newDueDate || undefined,
       priority: newPriority || undefined,
       order: maxOrder + 1,
+      category: newCategory || undefined,
+      recurring: newRecurring || undefined,
     };
 
     setTodos([...todos, newTodo]);
     setInput("");
     setNewDueDate(new Date().toISOString().split("T")[0]);
     setNewPriority("medium");
+    setNewCategory("");
+    setNewRecurring("");
+  };
+
+  const getNextDueDate = (currentDate: string, recurringType: RecurringType): string => {
+    const date = new Date(currentDate);
+    switch (recurringType) {
+      case "daily":
+        date.setDate(date.getDate() + 1);
+        break;
+      case "weekly":
+        date.setDate(date.getDate() + 7);
+        break;
+      case "monthly":
+        date.setMonth(date.getMonth() + 1);
+        break;
+    }
+    return date.toISOString().split("T")[0];
   };
 
   const toggleTodo = (id: number) => {
+    const todo = todos.find((t) => t.id === id);
+    if (!todo) return;
+
+    // If completing a recurring task, create a new instance
+    if (!todo.completed && todo.recurring && todo.dueDate) {
+      const newRecurringTodo: Todo = {
+        ...todo,
+        id: Date.now(),
+        completed: false,
+        createdAt: new Date().toISOString(),
+        completedAt: undefined,
+        dueDate: getNextDueDate(todo.dueDate, todo.recurring),
+        pomodoroStartTime: undefined,
+        pomodoroDuration: undefined,
+        pomodoroPaused: undefined,
+        pomodoroTimeRemaining: undefined,
+        pomodoroIsBreak: undefined,
+        pomodoroCount: 0,
+        subtasks: todo.subtasks?.map((st) => ({ ...st, completed: false })),
+      };
+
+      setTodos([
+        ...todos.map((t) =>
+          t.id === id
+            ? { ...t, completed: true, completedAt: new Date().toISOString(), recurring: undefined }
+            : t
+        ),
+        newRecurringTodo,
+      ]);
+    } else {
+      setTodos(
+        todos.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                completed: !t.completed,
+                completedAt: !t.completed ? new Date().toISOString() : undefined,
+              }
+            : t
+        )
+      );
+    }
+  };
+
+  const deleteTodo = (id: number) => {
+    setTodos(todos.filter((todo) => todo.id !== id));
+  };
+
+  // Subtask functions
+  const addSubtask = (todoId: number) => {
+    const text = subtaskInput[todoId]?.trim();
+    if (!text) return;
+
     setTodos(
       todos.map((todo) =>
-        todo.id === id
+        todo.id === todoId
           ? {
               ...todo,
-              completed: !todo.completed,
-              completedAt: !todo.completed ? new Date().toISOString() : undefined,
+              subtasks: [
+                ...(todo.subtasks || []),
+                { id: Date.now(), text, completed: false },
+              ],
+            }
+          : todo
+      )
+    );
+    setSubtaskInput({ ...subtaskInput, [todoId]: "" });
+  };
+
+  const toggleSubtask = (todoId: number, subtaskId: number) => {
+    setTodos(
+      todos.map((todo) =>
+        todo.id === todoId
+          ? {
+              ...todo,
+              subtasks: todo.subtasks?.map((st) =>
+                st.id === subtaskId ? { ...st, completed: !st.completed } : st
+              ),
             }
           : todo
       )
     );
   };
 
-  const deleteTodo = (id: number) => {
-    setTodos(todos.filter((todo) => todo.id !== id));
+  const deleteSubtask = (todoId: number, subtaskId: number) => {
+    setTodos(
+      todos.map((todo) =>
+        todo.id === todoId
+          ? {
+              ...todo,
+              subtasks: todo.subtasks?.filter((st) => st.id !== subtaskId),
+            }
+          : todo
+      )
+    );
   };
 
   const startEditing = (id: number, text: string) => {
@@ -439,10 +642,74 @@ export default function Home() {
     setDraggedId(null);
   };
 
+  // Export functions
+  const exportToObsidian = () => {
+    const lines: string[] = [];
+
+    [...todos].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach((todo) => {
+      const checkbox = todo.completed ? "[x]" : "[ ]";
+      const category = todo.category ? `@${todo.category} ` : "";
+      const dueDate = todo.dueDate ? `📅 ${todo.dueDate} ` : "";
+      const completedDate = todo.completedAt ? `✅ ${todo.completedAt.split("T")[0]} ` : "";
+
+      lines.push(`- ${checkbox} ${category}${dueDate}${todo.text}${todo.completed ? ` ${completedDate}` : ""}`);
+
+      // Add subtasks
+      if (todo.subtasks && todo.subtasks.length > 0) {
+        todo.subtasks.forEach((st) => {
+          const stCheckbox = st.completed ? "[x]" : "[ ]";
+          lines.push(`  - ${stCheckbox} ${st.text}`);
+        });
+      }
+    });
+
+    return lines.join("\n");
+  };
+
+  const exportToJSON = () => {
+    return JSON.stringify(todos, null, 2);
+  };
+
+  const downloadExport = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importFromJSON = (jsonString: string) => {
+    try {
+      const imported = JSON.parse(jsonString) as Todo[];
+      setTodos(imported);
+      setShowExportModal(false);
+    } catch {
+      alert("Invalid JSON format");
+    }
+  };
+
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      importFromJSON(content);
+    };
+    reader.readAsText(file);
+  };
+
+  // Filter by category
   const activeTodos = todos
     .filter((todo) => !todo.completed)
+    .filter((todo) => filterCategory === "all" || todo.category === filterCategory)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const completedTodos = todos.filter((todo) => todo.completed);
+  const completedTodos = todos
+    .filter((todo) => todo.completed)
+    .filter((todo) => filterCategory === "all" || todo.category === filterCategory);
 
   return (
     <div className={`min-h-screen py-12 px-4 transition-colors ${darkMode ? "bg-gray-900" : "bg-gray-100"}`}>
@@ -464,11 +731,12 @@ export default function Home() {
           <div className="space-y-3 mb-8">
             <div className="flex gap-2">
               <input
+                id="new-task-input"
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Add a new task..."
+                placeholder="Add a new task... (press N to focus)"
                 className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400" : "border-gray-300"}`}
               />
               <button
@@ -487,14 +755,52 @@ export default function Home() {
               />
               <select
                 value={newPriority}
-                onChange={(e) => setNewPriority(e.target.value as Priority | "")}
+                onChange={(e) => setNewPriority(e.target.value as Priority)}
                 className={`px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white" : "border-gray-300"}`}
               >
-                <option value="">No priority</option>
                 <option value="high">High priority</option>
                 <option value="medium">Medium priority</option>
                 <option value="low">Low priority</option>
               </select>
+              <select
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                className={`px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white" : "border-gray-300"}`}
+              >
+                <option value="">No category</option>
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>@{cat}</option>
+                ))}
+              </select>
+              <select
+                value={newRecurring}
+                onChange={(e) => setNewRecurring(e.target.value as RecurringType | "")}
+                className={`px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white" : "border-gray-300"}`}
+              >
+                <option value="">Not recurring</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            <div className="flex gap-2 items-center">
+              <span className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Filter:</span>
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className={`px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white" : "border-gray-300"}`}
+              >
+                <option value="all">All categories</option>
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>@{cat}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => setShowExportModal(true)}
+                className={`ml-auto px-3 py-2 rounded-lg text-sm transition-colors ${darkMode ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
+              >
+                Export/Import
+              </button>
             </div>
           </div>
 
@@ -512,6 +818,10 @@ export default function Home() {
                     const isBreak = todo.pomodoroIsBreak;
                     const overdue = todo.dueDate && isOverdue(todo.dueDate) && !todo.completed;
 
+                    const subtaskProgress = todo.subtasks?.length
+                      ? `${todo.subtasks.filter((st) => st.completed).length}/${todo.subtasks.length}`
+                      : null;
+
                     return (
                       <div
                         key={todo.id}
@@ -519,8 +829,13 @@ export default function Home() {
                         onDragStart={() => handleDragStart(todo.id)}
                         onDragOver={(e) => handleDragOver(e, todo.id)}
                         onDragEnd={handleDragEnd}
+                        onClick={() => setSelectedTaskId(todo.id)}
                         className={`p-4 rounded-lg transition-colors cursor-grab active:cursor-grabbing ${
                           draggedId === todo.id ? "opacity-50" : ""
+                        } ${
+                          selectedTaskId === todo.id
+                            ? "ring-2 ring-blue-500"
+                            : ""
                         } ${
                           todo.priority
                             ? getPriorityBg(todo.priority, darkMode)
@@ -566,11 +881,26 @@ export default function Home() {
                               </div>
                             ) : (
                               <>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {todo.category && (
+                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${darkMode ? "bg-purple-900/50 text-purple-300" : "bg-purple-100 text-purple-700"}`}>
+                                      @{todo.category}
+                                    </span>
+                                  )}
                                   <span className={darkMode ? "text-white" : "text-gray-800"}>{todo.text}</span>
                                   {todo.priority && (
                                     <span className={`text-xs font-semibold px-2 py-0.5 rounded ${getPriorityColor(todo.priority, darkMode)}`}>
                                       {todo.priority.toUpperCase()}
+                                    </span>
+                                  )}
+                                  {todo.recurring && (
+                                    <span className={`text-xs px-2 py-0.5 rounded ${darkMode ? "bg-cyan-900/50 text-cyan-300" : "bg-cyan-100 text-cyan-700"}`}>
+                                      🔄 {todo.recurring}
+                                    </span>
+                                  )}
+                                  {subtaskProgress && (
+                                    <span className={`text-xs px-2 py-0.5 rounded ${darkMode ? "bg-gray-600 text-gray-300" : "bg-gray-200 text-gray-600"}`}>
+                                      ✓ {subtaskProgress}
                                     </span>
                                   )}
                                 </div>
@@ -601,6 +931,51 @@ export default function Home() {
                               </button>
                             </>
                           )}
+                        </div>
+
+                        {/* Subtasks Section */}
+                        {(todo.subtasks?.length || 0) > 0 && (
+                          <div className={`mt-3 pt-3 border-t ${darkMode ? "border-gray-600" : "border-gray-200"}`}>
+                            <div className="space-y-1">
+                              {todo.subtasks?.map((st) => (
+                                <div key={st.id} className="flex items-center gap-2 ml-6">
+                                  <input
+                                    type="checkbox"
+                                    checked={st.completed}
+                                    onChange={() => toggleSubtask(todo.id, st.id)}
+                                    className="w-4 h-4 text-blue-500 rounded focus:ring-1 focus:ring-blue-500"
+                                  />
+                                  <span className={`text-sm ${st.completed ? "line-through" : ""} ${darkMode ? (st.completed ? "text-gray-500" : "text-gray-300") : (st.completed ? "text-gray-400" : "text-gray-600")}`}>
+                                    {st.text}
+                                  </span>
+                                  <button
+                                    onClick={() => deleteSubtask(todo.id, st.id)}
+                                    className={`text-xs px-1 rounded ${darkMode ? "text-red-400 hover:bg-gray-600" : "text-red-500 hover:bg-red-50"}`}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Add Subtask Input */}
+                        <div className={`mt-2 ml-6 flex gap-2`}>
+                          <input
+                            type="text"
+                            value={subtaskInput[todo.id] || ""}
+                            onChange={(e) => setSubtaskInput({ ...subtaskInput, [todo.id]: e.target.value })}
+                            onKeyPress={(e) => e.key === "Enter" && addSubtask(todo.id)}
+                            placeholder="Add subtask..."
+                            className={`flex-1 px-2 py-1 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${darkMode ? "bg-gray-600 border-gray-500 text-white placeholder-gray-400" : "border-gray-300"}`}
+                          />
+                          <button
+                            onClick={() => addSubtask(todo.id)}
+                            className={`px-2 py-1 text-sm rounded ${darkMode ? "bg-gray-600 hover:bg-gray-500 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
+                          >
+                            +
+                          </button>
                         </div>
 
                         {/* Pomodoro Timer Section */}
@@ -772,8 +1147,88 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {/* Documentation / Tips */}
+          <div className={`mt-8 pt-6 border-t ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+            <details className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+              <summary className="cursor-pointer hover:text-blue-500 font-medium">Keyboard Shortcuts & Tips</summary>
+              <div className="mt-3 space-y-2 ml-4">
+                <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>N</kbd> — Focus new task input</p>
+                <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>↑</kbd> <kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>↓</kbd> or <kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>J</kbd> <kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>K</kbd> — Navigate tasks</p>
+                <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>Space</kbd> — Start/pause pomodoro timer on selected task</p>
+                <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>Enter</kbd> — Complete selected task</p>
+                <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>Delete</kbd> — Delete selected task</p>
+                <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>E</kbd> — Open export/import modal</p>
+                <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>Esc</kbd> — Deselect task / close modal</p>
+                <div className="mt-3 pt-3 border-t border-dashed">
+                  <p className="font-medium mb-1">Tips:</p>
+                  <p>• Drag tasks using the ⋮⋮ handle to reorder</p>
+                  <p>• Click a task to select it for keyboard control</p>
+                  <p>• Recurring tasks auto-create the next instance when completed</p>
+                  <p>• Pomodoro: 25min work → 5min break → repeat 4x → 15min long break</p>
+                </div>
+              </div>
+            </details>
+          </div>
         </div>
       </div>
+
+      {/* Export/Import Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowExportModal(false)}>
+          <div
+            className={`rounded-xl p-6 max-w-lg w-full mx-4 ${darkMode ? "bg-gray-800" : "bg-white"}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className={`text-xl font-bold mb-4 ${darkMode ? "text-white" : "text-gray-800"}`}>Export / Import</h2>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className={`font-medium mb-2 ${darkMode ? "text-gray-300" : "text-gray-700"}`}>Export</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => downloadExport(exportToObsidian(), "todos.md")}
+                    className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm"
+                  >
+                    Obsidian Markdown
+                  </button>
+                  <button
+                    onClick={() => downloadExport(exportToJSON(), "todos.json")}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                  >
+                    JSON
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <h3 className={`font-medium mb-2 ${darkMode ? "text-gray-300" : "text-gray-700"}`}>Import (JSON)</h3>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileImport}
+                  className={`block w-full text-sm ${darkMode ? "text-gray-300" : "text-gray-600"}`}
+                />
+              </div>
+
+              <div className={`text-xs ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
+                <p className="font-medium">Obsidian format example:</p>
+                <pre className={`mt-1 p-2 rounded text-xs overflow-x-auto ${darkMode ? "bg-gray-700" : "bg-gray-100"}`}>
+{`- [ ] @work 📅 2024-06-01 Task text
+- [x] @home Task done ✅ 2024-06-24`}
+                </pre>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowExportModal(false)}
+              className={`mt-4 w-full py-2 rounded-lg transition-colors ${darkMode ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

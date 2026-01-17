@@ -5,6 +5,13 @@ import path from "path";
 const TODOS_FILE = path.join(process.cwd(), "todos.md");
 
 type Priority = "high" | "medium" | "low";
+type RecurringType = "daily" | "weekly" | "monthly";
+
+interface Subtask {
+  id: number;
+  text: string;
+  completed: boolean;
+}
 
 interface Todo {
   id: number;
@@ -21,6 +28,9 @@ interface Todo {
   dueDate?: string;
   priority?: Priority;
   order?: number;
+  category?: string;
+  subtasks?: Subtask[];
+  recurring?: RecurringType;
 }
 
 // Parse markdown file to todos
@@ -78,6 +88,16 @@ async function parseTodos(): Promise<Todo[]> {
         currentTodo.priority = line.replace("- **Priority:**", "").trim() as Priority;
       } else if (line.startsWith("- **Order:**") && currentTodo) {
         currentTodo.order = parseInt(line.replace("- **Order:**", "").trim());
+      } else if (line.startsWith("- **Category:**") && currentTodo) {
+        currentTodo.category = line.replace("- **Category:**", "").trim();
+      } else if (line.startsWith("- **Recurring:**") && currentTodo) {
+        currentTodo.recurring = line.replace("- **Recurring:**", "").trim() as RecurringType;
+      } else if (line.startsWith("- **Subtasks:**") && currentTodo) {
+        try {
+          currentTodo.subtasks = JSON.parse(line.replace("- **Subtasks:**", "").trim());
+        } catch {
+          currentTodo.subtasks = [];
+        }
       }
     }
 
@@ -131,6 +151,15 @@ function todosToMarkdown(todos: Todo[]): string {
       }
       if (todo.order !== undefined) {
         markdown += `- **Order:** ${todo.order}\n`;
+      }
+      if (todo.category) {
+        markdown += `- **Category:** ${todo.category}\n`;
+      }
+      if (todo.recurring) {
+        markdown += `- **Recurring:** ${todo.recurring}\n`;
+      }
+      if (todo.subtasks && todo.subtasks.length > 0) {
+        markdown += `- **Subtasks:** ${JSON.stringify(todo.subtasks)}\n`;
       }
       markdown += "\n";
     });
