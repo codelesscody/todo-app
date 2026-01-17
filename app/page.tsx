@@ -330,9 +330,10 @@ export default function Home() {
 
     // If completing a recurring task, create a new instance
     if (!todo.completed && todo.recurring && todo.dueDate) {
+      const newId = Date.now() + Math.floor(Math.random() * 1000);
       const newRecurringTodo: Todo = {
         ...todo,
-        id: Date.now(),
+        id: newId,
         completed: false,
         createdAt: new Date().toISOString(),
         completedAt: undefined,
@@ -343,7 +344,11 @@ export default function Home() {
         pomodoroTimeRemaining: undefined,
         pomodoroIsBreak: undefined,
         pomodoroCount: 0,
-        subtasks: todo.subtasks?.map((st) => ({ ...st, completed: false })),
+        subtasks: todo.subtasks?.map((st, idx) => ({
+          ...st,
+          id: newId + idx + 1,
+          completed: false
+        })),
       };
 
       setTodos([
