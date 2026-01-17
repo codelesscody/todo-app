@@ -53,11 +53,13 @@ async function parseTodos(): Promise<Todo[]> {
         const match = line.match(/## \[([ x])\] (.+)/);
         if (match) {
           currentTodo = {
-            id: Date.now() + todos.length,
+            id: Date.now() + todos.length, // Default, will be overwritten if ID exists in file
             text: match[2],
             completed: match[1] === "x",
           };
         }
+      } else if (line.startsWith("- **ID:**") && currentTodo) {
+        currentTodo.id = parseInt(line.replace("- **ID:**", "").trim());
       } else if (line.startsWith("- **Created:**") && currentTodo) {
         const dateStr = line.replace("- **Created:**", "").trim();
         currentTodo.createdAt = dateStr;
@@ -124,6 +126,7 @@ function todosToMarkdown(todos: Todo[]): string {
     markdown += "## Active Tasks\n\n";
     activeTodos.forEach((todo) => {
       markdown += `## [ ] ${todo.text}\n`;
+      markdown += `- **ID:** ${todo.id}\n`;
       markdown += `- **Created:** ${todo.createdAt}\n`;
       if (todo.pomodoroStartTime) {
         markdown += `- **Pomodoro Start:** ${todo.pomodoroStartTime}\n`;
@@ -169,6 +172,7 @@ function todosToMarkdown(todos: Todo[]): string {
     markdown += "## Completed Tasks\n\n";
     completedTodos.forEach((todo) => {
       markdown += `## [x] ${todo.text}\n`;
+      markdown += `- **ID:** ${todo.id}\n`;
       markdown += `- **Created:** ${todo.createdAt}\n`;
       if (todo.completedAt) {
         markdown += `- **Completed:** ${todo.completedAt}\n`;
