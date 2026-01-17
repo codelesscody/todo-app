@@ -41,7 +41,10 @@ export default function Home() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [darkMode, setDarkMode] = useState(false);
-  const [newDueDate, setNewDueDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [newDueDate, setNewDueDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
   const [newPriority, setNewPriority] = useState<Priority>("medium");
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [newCategory, setNewCategory] = useState("");
@@ -302,14 +305,15 @@ export default function Home() {
 
     setTodos([...todos, newTodo]);
     setInput("");
-    setNewDueDate(new Date().toISOString().split("T")[0]);
+    const today = new Date();
+    setNewDueDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
     setNewPriority("medium");
     setNewCategory("");
     setNewRecurring("");
   };
 
   const getNextDueDate = (currentDate: string, recurringType: RecurringType): string => {
-    const date = new Date(currentDate);
+    const date = new Date(currentDate + "T00:00:00"); // Parse as local time
     switch (recurringType) {
       case "daily":
         date.setDate(date.getDate() + 1);
@@ -321,7 +325,7 @@ export default function Home() {
         date.setMonth(date.getMonth() + 1);
         break;
     }
-    return date.toISOString().split("T")[0];
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   };
 
   const toggleTodo = (id: number) => {
@@ -578,22 +582,25 @@ export default function Home() {
     });
   };
 
+  // Parse date string as local time (not UTC)
+  const parseLocalDate = (dateStr: string) => {
+    return new Date(dateStr + "T00:00:00");
+  };
+
   const formatDueDate = (date: string) => {
-    const dueDate = new Date(date);
+    const dueDate = parseLocalDate(date);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const dueDateOnly = new Date(dueDate);
-    dueDateOnly.setHours(0, 0, 0, 0);
 
-    if (dueDateOnly.getTime() === today.getTime()) return "Today";
-    if (dueDateOnly.getTime() === tomorrow.getTime()) return "Tomorrow";
+    if (dueDate.getTime() === today.getTime()) return "Today";
+    if (dueDate.getTime() === tomorrow.getTime()) return "Tomorrow";
     return dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
   const isOverdue = (date: string) => {
-    const dueDate = new Date(date);
+    const dueDate = parseLocalDate(date);
     dueDate.setHours(23, 59, 59, 999);
     return dueDate < new Date();
   };
