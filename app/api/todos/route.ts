@@ -31,6 +31,7 @@ interface Todo {
   category?: string;
   subtasks?: Subtask[];
   recurring?: RecurringType;
+  notes?: string;
 }
 
 // Parse markdown file to todos
@@ -100,6 +101,9 @@ async function parseTodos(): Promise<Todo[]> {
         } catch {
           currentTodo.subtasks = [];
         }
+      } else if (line.startsWith("- **Notes:**") && currentTodo) {
+        // Notes are stored with escaped newlines
+        currentTodo.notes = line.replace("- **Notes:**", "").trim().replace(/\\n/g, "\n");
       }
     }
 
@@ -164,6 +168,10 @@ function todosToMarkdown(todos: Todo[]): string {
       if (todo.subtasks && todo.subtasks.length > 0) {
         markdown += `- **Subtasks:** ${JSON.stringify(todo.subtasks)}\n`;
       }
+      if (todo.notes) {
+        // Escape newlines to keep notes on one line
+        markdown += `- **Notes:** ${todo.notes.replace(/\n/g, "\\n")}\n`;
+      }
       markdown += "\n";
     });
   }
@@ -176,6 +184,9 @@ function todosToMarkdown(todos: Todo[]): string {
       markdown += `- **Created:** ${todo.createdAt}\n`;
       if (todo.completedAt) {
         markdown += `- **Completed:** ${todo.completedAt}\n`;
+      }
+      if (todo.notes) {
+        markdown += `- **Notes:** ${todo.notes.replace(/\n/g, "\\n")}\n`;
       }
       markdown += "\n";
     });

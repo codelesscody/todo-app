@@ -29,6 +29,7 @@ interface Todo {
   category?: string; // e.g., "work", "home", "personal"
   subtasks?: Subtask[];
   recurring?: RecurringType;
+  notes?: string;
 }
 
 const CATEGORIES = ["work", "home", "personal", "learning", "health"];
@@ -53,6 +54,8 @@ export default function Home() {
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [subtaskInput, setSubtaskInput] = useState<{ [key: number]: string }>({});
   const [showExportModal, setShowExportModal] = useState(false);
+  const [editingNotesId, setEditingNotesId] = useState<number | null>(null);
+  const [notesInput, setNotesInput] = useState("");
   const hasLoadedRef = useRef(false);
 
   // Load dark mode preference on mount
@@ -446,6 +449,26 @@ export default function Home() {
     );
   };
 
+  const startEditingNotes = (id: number, notes: string) => {
+    setEditingNotesId(id);
+    setNotesInput(notes);
+  };
+
+  const saveNotes = (id: number) => {
+    setTodos(
+      todos.map((todo) =>
+        todo.id === id ? { ...todo, notes: notesInput } : todo
+      )
+    );
+    setEditingNotesId(null);
+    setNotesInput("");
+  };
+
+  const cancelNotesEdit = () => {
+    setEditingNotesId(null);
+    setNotesInput("");
+  };
+
   const startEditing = (id: number, text: string) => {
     setEditingId(id);
     setEditText(text);
@@ -680,6 +703,13 @@ export default function Home() {
       const completedDate = todo.completedAt ? `✅ ${todo.completedAt.split("T")[0]} ` : "";
 
       lines.push(`- ${checkbox} ${category}${dueDate}${todo.text}${todo.completed ? ` ${completedDate}` : ""}`);
+
+      // Add notes as indented text
+      if (todo.notes) {
+        todo.notes.split("\n").forEach((noteLine) => {
+          lines.push(`  ${noteLine}`);
+        });
+      }
 
       // Add subtasks
       if (todo.subtasks && todo.subtasks.length > 0) {
@@ -960,6 +990,46 @@ export default function Home() {
                           )}
                         </div>
 
+                        {/* Notes Section */}
+                        <div className={`mt-3 pt-3 border-t ${darkMode ? "border-gray-600" : "border-gray-200"}`}>
+                          {editingNotesId === todo.id ? (
+                            <div className="space-y-2">
+                              <textarea
+                                value={notesInput}
+                                onChange={(e) => setNotesInput(e.target.value)}
+                                placeholder="Add notes..."
+                                rows={3}
+                                className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none ${darkMode ? "bg-gray-600 border-gray-500 text-white placeholder-gray-400" : "border-gray-300"}`}
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => saveNotes(todo.id)}
+                                  className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={cancelNotesEdit}
+                                  className={`px-3 py-1 text-sm rounded ${darkMode ? "bg-gray-600 hover:bg-gray-500 text-gray-300" : "bg-gray-200 hover:bg-gray-300"}`}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => startEditingNotes(todo.id, todo.notes || "")}
+                              className={`cursor-pointer text-sm ${darkMode ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                              {todo.notes ? (
+                                <p className="whitespace-pre-wrap">{todo.notes}</p>
+                              ) : (
+                                <p className="italic">Click to add notes...</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
                         {/* Subtasks Section */}
                         {(todo.subtasks?.length || 0) > 0 && (
                           <div className={`mt-3 pt-3 border-t ${darkMode ? "border-gray-600" : "border-gray-200"}`}>
@@ -1191,6 +1261,7 @@ export default function Home() {
                   <p className="font-medium mb-1">Tips:</p>
                   <p>• Drag tasks using the ⋮⋮ handle to reorder</p>
                   <p>• Click a task to select it for keyboard control</p>
+                  <p>• Click &quot;Add notes...&quot; on any task to add detailed notes</p>
                   <p>• Recurring tasks auto-create the next instance when completed</p>
                   <p>• Pomodoro: 25min work → 5min break → repeat 4x → 15min long break</p>
                 </div>
