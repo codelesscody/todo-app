@@ -32,6 +32,8 @@ interface Todo {
   subtasks?: Subtask[];
   recurring?: RecurringType;
   notes?: string;
+  tags?: string[];
+  timeEstimate?: number;
 }
 
 // Parse markdown file to todos
@@ -104,6 +106,14 @@ async function parseTodos(): Promise<Todo[]> {
       } else if (line.startsWith("- **Notes:**") && currentTodo) {
         // Notes are stored with escaped newlines
         currentTodo.notes = line.replace("- **Notes:**", "").trim().replace(/\\n/g, "\n");
+      } else if (line.startsWith("- **Tags:**") && currentTodo) {
+        try {
+          currentTodo.tags = JSON.parse(line.replace("- **Tags:**", "").trim());
+        } catch {
+          currentTodo.tags = [];
+        }
+      } else if (line.startsWith("- **Time Estimate:**") && currentTodo) {
+        currentTodo.timeEstimate = parseInt(line.replace("- **Time Estimate:**", "").trim());
       }
     }
 
@@ -172,6 +182,12 @@ function todosToMarkdown(todos: Todo[]): string {
         // Escape newlines to keep notes on one line
         markdown += `- **Notes:** ${todo.notes.replace(/\n/g, "\\n")}\n`;
       }
+      if (todo.tags && todo.tags.length > 0) {
+        markdown += `- **Tags:** ${JSON.stringify(todo.tags)}\n`;
+      }
+      if (todo.timeEstimate) {
+        markdown += `- **Time Estimate:** ${todo.timeEstimate}\n`;
+      }
       markdown += "\n";
     });
   }
@@ -187,6 +203,12 @@ function todosToMarkdown(todos: Todo[]): string {
       }
       if (todo.notes) {
         markdown += `- **Notes:** ${todo.notes.replace(/\n/g, "\\n")}\n`;
+      }
+      if (todo.tags && todo.tags.length > 0) {
+        markdown += `- **Tags:** ${JSON.stringify(todo.tags)}\n`;
+      }
+      if (todo.timeEstimate) {
+        markdown += `- **Time Estimate:** ${todo.timeEstimate}\n`;
       }
       markdown += "\n";
     });

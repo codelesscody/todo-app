@@ -30,6 +30,8 @@ interface Todo {
   subtasks?: Subtask[];
   recurring?: RecurringType;
   notes?: string;
+  tags?: string[];
+  timeEstimate?: number; // in minutes
 }
 
 const CATEGORIES = ["work", "home", "personal", "learning", "health"];
@@ -56,6 +58,10 @@ export default function Home() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [editingNotesId, setEditingNotesId] = useState<number | null>(null);
   const [notesInput, setNotesInput] = useState("");
+  const [newTags, setNewTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [newTimeEstimate, setNewTimeEstimate] = useState<number | "">("");
+  const [tagInputForTask, setTagInputForTask] = useState<{ [key: number]: string }>({});
   const hasLoadedRef = useRef(false);
 
   // Load dark mode preference on mount
@@ -319,6 +325,8 @@ export default function Home() {
       order: maxOrder + 1,
       category: newCategory || undefined,
       recurring: newRecurring || undefined,
+      tags: newTags.length > 0 ? newTags : undefined,
+      timeEstimate: newTimeEstimate ? Number(newTimeEstimate) : undefined,
     };
 
     setTodos([...todos, newTodo]);
@@ -328,6 +336,9 @@ export default function Home() {
     setNewPriority("medium");
     setNewCategory("");
     setNewRecurring("");
+    setNewTags([]);
+    setTagInput("");
+    setNewTimeEstimate("");
   };
 
   const getNextDueDate = (currentDate: string, recurringType: RecurringType): string => {
@@ -467,6 +478,48 @@ export default function Home() {
   const cancelNotesEdit = () => {
     setEditingNotesId(null);
     setNotesInput("");
+  };
+
+  const addTagToNewTask = () => {
+    if (tagInput.trim() === "" || newTags.includes(tagInput.trim())) return;
+    setNewTags([...newTags, tagInput.trim()]);
+    setTagInput("");
+  };
+
+  const removeTagFromNewTask = (tag: string) => {
+    setNewTags(newTags.filter((t) => t !== tag));
+  };
+
+  const addTagToTask = (todoId: number) => {
+    const input = tagInputForTask[todoId]?.trim();
+    if (!input) return;
+
+    setTodos(
+      todos.map((todo) =>
+        todo.id === todoId && !todo.tags?.includes(input)
+          ? { ...todo, tags: [...(todo.tags || []), input] }
+          : todo
+      )
+    );
+    setTagInputForTask({ ...tagInputForTask, [todoId]: "" });
+  };
+
+  const removeTagFromTask = (todoId: number, tag: string) => {
+    setTodos(
+      todos.map((todo) =>
+        todo.id === todoId
+          ? { ...todo, tags: todo.tags?.filter((t) => t !== tag) }
+          : todo
+      )
+    );
+  };
+
+  const updateTimeEstimate = (todoId: number, minutes: number | undefined) => {
+    setTodos(
+      todos.map((todo) =>
+        todo.id === todoId ? { ...todo, timeEstimate: minutes } : todo
+      )
+    );
   };
 
   const startEditing = (id: number, text: string) => {
@@ -701,8 +754,10 @@ export default function Home() {
       const category = todo.category ? `@${todo.category} ` : "";
       const dueDate = todo.dueDate ? `📅 ${todo.dueDate} ` : "";
       const completedDate = todo.completedAt ? `✅ ${todo.completedAt.split("T")[0]} ` : "";
+      const timeEst = todo.timeEstimate ? `⏱${todo.timeEstimate}m ` : "";
+      const tags = todo.tags?.length ? todo.tags.map(t => `#${t}`).join(" ") + " " : "";
 
-      lines.push(`- ${checkbox} ${category}${dueDate}${todo.text}${todo.completed ? ` ${completedDate}` : ""}`);
+      lines.push(`- ${checkbox} ${category}${tags}${dueDate}${timeEst}${todo.text}${todo.completed ? ` ${completedDate}` : ""}`);
 
       // Add notes as indented text
       if (todo.notes) {
@@ -839,6 +894,46 @@ export default function Home() {
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
               </select>
+              <input
+                type="number"
+                min="1"
+                placeholder="Est. mins"
+                value={newTimeEstimate}
+                onChange={(e) => setNewTimeEstimate(e.target.value ? parseInt(e.target.value) : "")}
+                className={`w-24 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400" : "border-gray-300"}`}
+              />
+            </div>
+            <div className="flex gap-2 items-center flex-wrap">
+              <input
+                type="text"
+                placeholder="Add tag..."
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addTagToNewTask())}
+                className={`px-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400" : "border-gray-300"}`}
+              />
+              <button
+                type="button"
+                onClick={addTagToNewTask}
+                className={`px-2 py-1.5 rounded-lg text-sm ${darkMode ? "bg-gray-600 hover:bg-gray-500 text-gray-300" : "bg-gray-200 hover:bg-gray-300"}`}
+              >
+                +
+              </button>
+              {newTags.map((tag) => (
+                <span
+                  key={tag}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${darkMode ? "bg-blue-900 text-blue-300" : "bg-blue-100 text-blue-700"}`}
+                >
+                  #{tag}
+                  <button
+                    type="button"
+                    onClick={() => removeTagFromNewTask(tag)}
+                    className="hover:text-red-500"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
             </div>
             <div className="flex gap-2 items-center">
               <span className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Filter:</span>
@@ -960,6 +1055,19 @@ export default function Home() {
                                       ✓ {subtaskProgress}
                                     </span>
                                   )}
+                                  {todo.timeEstimate && (
+                                    <span className={`text-xs px-2 py-0.5 rounded ${darkMode ? "bg-amber-900/50 text-amber-300" : "bg-amber-100 text-amber-700"}`}>
+                                      ⏱ {todo.timeEstimate}m
+                                    </span>
+                                  )}
+                                  {todo.tags?.map((tag) => (
+                                    <span
+                                      key={tag}
+                                      className={`text-xs px-2 py-0.5 rounded ${darkMode ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-700"}`}
+                                    >
+                                      #{tag}
+                                    </span>
+                                  ))}
                                 </div>
                                 <div className={`text-xs mt-1 flex items-center gap-2 ${darkMode ? "text-gray-400" : "text-gray-400"}`}>
                                   <span>Added {formatDate(todo.createdAt)}</span>
@@ -1028,6 +1136,57 @@ export default function Home() {
                               )}
                             </div>
                           )}
+                        </div>
+
+                        {/* Tags Section */}
+                        <div className={`mt-3 pt-3 border-t ${darkMode ? "border-gray-600" : "border-gray-200"}`}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-xs font-medium ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Tags:</span>
+                            {todo.tags?.map((tag) => (
+                              <span
+                                key={tag}
+                                className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${darkMode ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-700"}`}
+                              >
+                                #{tag}
+                                <button
+                                  onClick={() => removeTagFromTask(todo.id, tag)}
+                                  className="hover:text-red-500"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                            <input
+                              type="text"
+                              placeholder="Add tag..."
+                              value={tagInputForTask[todo.id] || ""}
+                              onChange={(e) => setTagInputForTask({ ...tagInputForTask, [todo.id]: e.target.value })}
+                              onKeyPress={(e) => e.key === "Enter" && addTagToTask(todo.id)}
+                              className={`px-2 py-0.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-20 ${darkMode ? "bg-gray-600 border-gray-500 text-white placeholder-gray-400" : "border-gray-300"}`}
+                            />
+                            <button
+                              onClick={() => addTagToTask(todo.id)}
+                              className={`px-1.5 py-0.5 text-xs rounded ${darkMode ? "bg-gray-600 hover:bg-gray-500 text-gray-300" : "bg-gray-200 hover:bg-gray-300"}`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Time Estimate Section */}
+                        <div className={`mt-3 pt-3 border-t ${darkMode ? "border-gray-600" : "border-gray-200"}`}>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Time estimate:</span>
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder="mins"
+                              value={todo.timeEstimate || ""}
+                              onChange={(e) => updateTimeEstimate(todo.id, e.target.value ? parseInt(e.target.value) : undefined)}
+                              className={`px-2 py-0.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-16 ${darkMode ? "bg-gray-600 border-gray-500 text-white placeholder-gray-400" : "border-gray-300"}`}
+                            />
+                            <span className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"}`}>minutes</span>
+                          </div>
                         </div>
 
                         {/* Subtasks Section */}
@@ -1261,6 +1420,8 @@ export default function Home() {
                   <p className="font-medium mb-1">Tips:</p>
                   <p>• Drag tasks using the ⋮⋮ handle to reorder</p>
                   <p>• Click a task to select it for keyboard control</p>
+                  <p>• Add #tags to organize and find tasks quickly</p>
+                  <p>• Set time estimates to plan your day</p>
                   <p>• Click &quot;Add notes...&quot; on any task to add detailed notes</p>
                   <p>• Recurring tasks auto-create the next instance when completed</p>
                   <p>• Pomodoro: 25min work → 5min break → repeat 4x → 15min long break</p>
