@@ -64,6 +64,9 @@ export default function Home() {
   const [tagInputForTask, setTagInputForTask] = useState<{ [key: number]: string }>({});
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
+  const [deletedTodo, setDeletedTodo] = useState<Todo | null>(null);
+  const [showUndoToast, setShowUndoToast] = useState(false);
+  const undoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasLoadedRef = useRef(false);
 
   // Load dark mode preference on mount
@@ -226,6 +229,15 @@ export default function Home() {
         Notification.requestPermission();
       }
     }
+  }, []);
+
+  // Cleanup undo timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (undoTimeoutRef.current) {
+        clearTimeout(undoTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Keyboard shortcuts
@@ -425,7 +437,45 @@ export default function Home() {
   };
 
   const deleteTodo = (id: number) => {
+    const todoToDelete = todos.find((todo) => todo.id === id);
+    if (!todoToDelete) return;
+
+    // Clear any existing undo timeout
+    if (undoTimeoutRef.current) {
+      clearTimeout(undoTimeoutRef.current);
+    }
+
+    // Store the deleted todo for potential undo
+    setDeletedTodo(todoToDelete);
+    setShowUndoToast(true);
+
+    // Remove from list
     setTodos(todos.filter((todo) => todo.id !== id));
+
+    // Auto-dismiss toast after 5 seconds
+    undoTimeoutRef.current = setTimeout(() => {
+      setShowUndoToast(false);
+      setDeletedTodo(null);
+    }, 5000);
+  };
+
+  const undoDelete = () => {
+    if (deletedTodo) {
+      setTodos((prev) => [...prev, deletedTodo]);
+      setDeletedTodo(null);
+      setShowUndoToast(false);
+      if (undoTimeoutRef.current) {
+        clearTimeout(undoTimeoutRef.current);
+      }
+    }
+  };
+
+  const dismissUndoToast = () => {
+    setShowUndoToast(false);
+    setDeletedTodo(null);
+    if (undoTimeoutRef.current) {
+      clearTimeout(undoTimeoutRef.current);
+    }
   };
 
   const restoreTodo = (id: number) => {
@@ -1672,6 +1722,30 @@ export default function Home() {
               className={`mt-4 w-full py-2 rounded-lg transition-colors ${darkMode ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
             >
               Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Undo Delete Toast */}
+      {showUndoToast && deletedTodo && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg ${darkMode ? "bg-gray-700 text-white" : "bg-gray-800 text-white"}`}>
+            <span className="text-sm">
+              Deleted &quot;{deletedTodo.text.length > 30 ? deletedTodo.text.slice(0, 30) + "..." : deletedTodo.text}&quot;
+            </span>
+            <button
+              onClick={undoDelete}
+              className="px-3 py-1 text-sm font-semibold bg-blue-500 hover:bg-blue-600 rounded transition-colors"
+            >
+              Undo
+            </button>
+            <button
+              onClick={dismissUndoToast}
+              className="text-gray-400 hover:text-white transition-colors"
+              aria-label="Dismiss"
+            >
+              ×
             </button>
           </div>
         </div>
