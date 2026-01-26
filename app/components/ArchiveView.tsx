@@ -6,9 +6,10 @@ interface ArchiveViewProps {
   onRestore: (id: number) => void;
   onDelete: (id: number) => void;
   onClearAll: () => void;
+  onTagClick?: (tag: string) => void;
 }
 
-export function ArchiveView({ todos, darkMode, onRestore, onDelete, onClearAll }: ArchiveViewProps) {
+export function ArchiveView({ todos, darkMode, onRestore, onDelete, onClearAll, onTagClick }: ArchiveViewProps) {
   const completedTodos = todos.filter((t) => t.completed);
 
   return (
@@ -51,12 +52,14 @@ export function ArchiveView({ todos, darkMode, onRestore, onDelete, onClearAll }
                       {todo.text}
                     </span>
                     {todo.tags?.map((tag) => (
-                      <span
+                      <button
                         key={tag}
-                        className={`text-xs px-2 py-0.5 rounded ${darkMode ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-700"}`}
+                        onClick={() => onTagClick?.(tag)}
+                        className={`text-xs px-2 py-0.5 rounded cursor-pointer hover:ring-1 hover:ring-blue-400 transition-all ${darkMode ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-700"}`}
+                        title={`Filter by #${tag}`}
                       >
                         #{tag}
-                      </span>
+                      </button>
                     ))}
                   </div>
                   <div className={`text-xs mt-1 ${darkMode ? "text-gray-500" : "text-gray-400"}`}>

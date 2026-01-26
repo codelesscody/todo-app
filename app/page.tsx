@@ -14,12 +14,18 @@ import { UndoToast } from "./components/UndoToast";
 export default function Home() {
   const [darkMode, setDarkMode] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterTag, setFilterTag] = useState<string>("all");
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
 
   const todoState = useTodos();
+
+  // Get all unique tags from todos
+  const allTags = Array.from(
+    new Set(todoState.todos.flatMap((todo) => todo.tags || []))
+  ).sort();
 
   // Load dark mode preference on mount
   useEffect(() => {
@@ -136,15 +142,17 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [todoState, selectedTaskId]);
 
-  // Filter by category
+  // Filter by category and tag
   const activeTodos = todoState.todos
     .filter((todo) => !todo.completed)
     .filter((todo) => filterCategory === "all" || todo.category === filterCategory)
+    .filter((todo) => filterTag === "all" || todo.tags?.includes(filterTag))
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   const completedTodos = todoState.todos
     .filter((todo) => todo.completed)
-    .filter((todo) => filterCategory === "all" || todo.category === filterCategory);
+    .filter((todo) => filterCategory === "all" || todo.category === filterCategory)
+    .filter((todo) => filterTag === "all" || todo.tags?.includes(filterTag));
 
   // Create handlers object for TaskCard
   const taskCardHandlers = {
@@ -171,6 +179,7 @@ export default function Home() {
       todoState.setTagInputForTask((prev) => ({ ...prev, [todoId]: value })),
     onAddTag: todoState.addTagToTask,
     onRemoveTag: todoState.removeTagFromTask,
+    onTagClick: (tag: string) => setFilterTag(tag),
     onUpdateTimeEstimate: todoState.updateTimeEstimate,
     onStartPomodoro: todoState.startPomodoro,
     onPausePomodoro: todoState.pausePomodoro,
@@ -199,7 +208,7 @@ export default function Home() {
           <TaskInput onAddTodo={todoState.addTodo} darkMode={darkMode} />
 
           {/* Filter and action buttons */}
-          <div className="flex gap-2 items-center mb-6">
+          <div className="flex gap-2 items-center flex-wrap mb-6">
             <span className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Filter:</span>
             <select
               value={filterCategory}
@@ -211,6 +220,26 @@ export default function Home() {
                 <option key={cat} value={cat}>@{cat}</option>
               ))}
             </select>
+            {allTags.length > 0 && (
+              <select
+                value={filterTag}
+                onChange={(e) => setFilterTag(e.target.value)}
+                className={`px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white" : "border-gray-300"}`}
+              >
+                <option value="all">All tags</option>
+                {allTags.map((tag) => (
+                  <option key={tag} value={tag}>#{tag}</option>
+                ))}
+              </select>
+            )}
+            {(filterCategory !== "all" || filterTag !== "all") && (
+              <button
+                onClick={() => { setFilterCategory("all"); setFilterTag("all"); }}
+                className={`px-2 py-1 text-xs rounded transition-colors ${darkMode ? "text-gray-400 hover:text-white hover:bg-gray-700" : "text-gray-500 hover:text-gray-700 hover:bg-gray-200"}`}
+              >
+                Clear filters
+              </button>
+            )}
             <button
               onClick={() => setShowStatsModal(true)}
               className={`ml-auto px-3 py-2 rounded-lg text-sm transition-colors ${darkMode ? "bg-gray-700 hover:bg-gray-600 text-gray-300" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
@@ -234,11 +263,14 @@ export default function Home() {
           {/* Archive View */}
           {showArchive ? (
             <ArchiveView
-              todos={todoState.todos.filter((todo) => filterCategory === "all" || todo.category === filterCategory)}
+              todos={todoState.todos
+                .filter((todo) => filterCategory === "all" || todo.category === filterCategory)
+                .filter((todo) => filterTag === "all" || todo.tags?.includes(filterTag))}
               darkMode={darkMode}
               onRestore={todoState.restoreTodo}
               onDelete={todoState.deleteTodo}
               onClearAll={todoState.clearAllCompleted}
+              onTagClick={(tag) => setFilterTag(tag)}
             />
           ) : (
             <div className="space-y-6">

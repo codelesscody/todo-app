@@ -34,6 +34,7 @@ interface TaskCardProps {
     onTagInputChange: (todoId: number, value: string) => void;
     onAddTag: (todoId: number) => void;
     onRemoveTag: (todoId: number, tag: string) => void;
+    onTagClick: (tag: string) => void;
     onUpdateTimeEstimate: (todoId: number, minutes: number | undefined) => void;
     onStartPomodoro: (id: number) => void;
     onPausePomodoro: (id: number) => void;
@@ -150,12 +151,14 @@ export function TaskCard({
                   </span>
                 )}
                 {todo.tags?.map((tag) => (
-                  <span
+                  <button
                     key={tag}
-                    className={`text-xs px-2 py-0.5 rounded ${darkMode ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-700"}`}
+                    onClick={(e) => { e.stopPropagation(); handlers.onTagClick(tag); }}
+                    className={`text-xs px-2 py-0.5 rounded cursor-pointer hover:ring-1 hover:ring-blue-400 transition-all ${darkMode ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-700"}`}
+                    title={`Filter by #${tag}`}
                   >
                     #{tag}
-                  </span>
+                  </button>
                 ))}
               </div>
               <div className={`text-xs mt-1 flex items-center gap-2 ${darkMode ? "text-gray-400" : "text-gray-400"}`}>
@@ -236,9 +239,15 @@ export function TaskCard({
               key={tag}
               className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${darkMode ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-700"}`}
             >
-              #{tag}
               <button
-                onClick={() => handlers.onRemoveTag(todo.id, tag)}
+                onClick={(e) => { e.stopPropagation(); handlers.onTagClick(tag); }}
+                className="hover:underline"
+                title={`Filter by #${tag}`}
+              >
+                #{tag}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handlers.onRemoveTag(todo.id, tag); }}
                 className="hover:text-red-500"
               >
                 ×
