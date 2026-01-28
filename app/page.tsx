@@ -15,6 +15,7 @@ export default function Home() {
   const [darkMode, setDarkMode] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterTag, setFilterTag] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
@@ -136,23 +137,43 @@ export default function Home() {
         setShowArchive((prev) => !prev);
         return;
       }
+
+      // /: Focus search input
+      if (e.key === "/") {
+        e.preventDefault();
+        document.getElementById("search-input")?.focus();
+        return;
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [todoState, selectedTaskId]);
 
-  // Filter by category and tag
+  // Filter by category, tag, and search query
+  const searchLower = searchQuery.toLowerCase().trim();
+  const matchesSearch = (todo: typeof todoState.todos[0]) => {
+    if (!searchLower) return true;
+    return (
+      todo.text.toLowerCase().includes(searchLower) ||
+      todo.notes?.toLowerCase().includes(searchLower) ||
+      todo.tags?.some((tag) => tag.toLowerCase().includes(searchLower)) ||
+      todo.subtasks?.some((st) => st.text.toLowerCase().includes(searchLower))
+    );
+  };
+
   const activeTodos = todoState.todos
     .filter((todo) => !todo.completed)
     .filter((todo) => filterCategory === "all" || todo.category === filterCategory)
     .filter((todo) => filterTag === "all" || todo.tags?.includes(filterTag))
+    .filter(matchesSearch)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   const completedTodos = todoState.todos
     .filter((todo) => todo.completed)
     .filter((todo) => filterCategory === "all" || todo.category === filterCategory)
-    .filter((todo) => filterTag === "all" || todo.tags?.includes(filterTag));
+    .filter((todo) => filterTag === "all" || todo.tags?.includes(filterTag))
+    .filter(matchesSearch);
 
   // Create handlers object for TaskCard
   const taskCardHandlers = {
@@ -207,9 +228,26 @@ export default function Home() {
 
           <TaskInput onAddTodo={todoState.addTodo} darkMode={darkMode} />
 
-          {/* Filter and action buttons */}
+          {/* Search and filter */}
           <div className="flex gap-2 items-center flex-wrap mb-6">
-            <span className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Filter:</span>
+            <div className="relative">
+              <input
+                id="search-input"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search... (press /)"
+                className={`pl-8 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-44 ${darkMode ? "bg-gray-700 border-gray-600 text-white placeholder-gray-400" : "border-gray-300"}`}
+              />
+              <svg
+                className={`absolute left-2.5 top-2.5 w-4 h-4 ${darkMode ? "text-gray-400" : "text-gray-500"}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
@@ -232,9 +270,9 @@ export default function Home() {
                 ))}
               </select>
             )}
-            {(filterCategory !== "all" || filterTag !== "all") && (
+            {(filterCategory !== "all" || filterTag !== "all" || searchQuery) && (
               <button
-                onClick={() => { setFilterCategory("all"); setFilterTag("all"); }}
+                onClick={() => { setFilterCategory("all"); setFilterTag("all"); setSearchQuery(""); }}
                 className={`px-2 py-1 text-xs rounded transition-colors ${darkMode ? "text-gray-400 hover:text-white hover:bg-gray-700" : "text-gray-500 hover:text-gray-700 hover:bg-gray-200"}`}
               >
                 Clear filters
@@ -265,7 +303,8 @@ export default function Home() {
             <ArchiveView
               todos={todoState.todos
                 .filter((todo) => filterCategory === "all" || todo.category === filterCategory)
-                .filter((todo) => filterTag === "all" || todo.tags?.includes(filterTag))}
+                .filter((todo) => filterTag === "all" || todo.tags?.includes(filterTag))
+                .filter(matchesSearch)}
               darkMode={darkMode}
               onRestore={todoState.restoreTodo}
               onDelete={todoState.deleteTodo}
@@ -390,6 +429,7 @@ export default function Home() {
             <details className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
               <summary className="cursor-pointer hover:text-blue-500 font-medium">Keyboard Shortcuts & Tips</summary>
               <div className="mt-3 space-y-2 ml-4">
+                <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>/</kbd> — Focus search input</p>
                 <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>N</kbd> — Focus new task input</p>
                 <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>↑</kbd> <kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>↓</kbd> or <kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>J</kbd> <kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>K</kbd> — Navigate tasks</p>
                 <p><kbd className={`px-1.5 py-0.5 rounded text-xs ${darkMode ? "bg-gray-700" : "bg-gray-200"}`}>Space</kbd> — Start/pause pomodoro timer on selected task</p>
@@ -403,7 +443,8 @@ export default function Home() {
                   <p className="font-medium mb-1">Tips:</p>
                   <p>• Drag tasks using the ⋮⋮ handle to reorder</p>
                   <p>• Click a task to select it for keyboard control</p>
-                  <p>• Add #tags to organize and find tasks quickly</p>
+                  <p>• Search finds matches in task text, notes, tags, and subtasks</p>
+                  <p>• Add #tags to organize and filter tasks quickly</p>
                   <p>• Set time estimates to plan your day</p>
                   <p>• Click &quot;Add notes...&quot; on any task to add detailed notes</p>
                   <p>• Recurring tasks auto-create the next instance when completed</p>
