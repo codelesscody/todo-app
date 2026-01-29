@@ -11,11 +11,14 @@ import { StatsModal } from "./components/StatsModal";
 import { ExportModal } from "./components/ExportModal";
 import { UndoToast } from "./components/UndoToast";
 
+type SortOption = "manual" | "dueDate" | "priority" | "created";
+
 export default function Home() {
   const [darkMode, setDarkMode] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterTag, setFilterTag] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortOption>("manual");
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
@@ -162,18 +165,42 @@ export default function Home() {
     );
   };
 
+  // Sort function based on selected option
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  const sortTodos = (a: typeof todoState.todos[0], b: typeof todoState.todos[0]) => {
+    switch (sortBy) {
+      case "dueDate":
+        // Tasks with no due date go to the end
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return a.dueDate.localeCompare(b.dueDate);
+      case "priority":
+        // Tasks with no priority go to the end
+        const aPriority = a.priority ? priorityOrder[a.priority] : 3;
+        const bPriority = b.priority ? priorityOrder[b.priority] : 3;
+        return aPriority - bPriority;
+      case "created":
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      case "manual":
+      default:
+        return (a.order ?? 0) - (b.order ?? 0);
+    }
+  };
+
   const activeTodos = todoState.todos
     .filter((todo) => !todo.completed)
     .filter((todo) => filterCategory === "all" || todo.category === filterCategory)
     .filter((todo) => filterTag === "all" || todo.tags?.includes(filterTag))
     .filter(matchesSearch)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    .sort(sortTodos);
 
   const completedTodos = todoState.todos
     .filter((todo) => todo.completed)
     .filter((todo) => filterCategory === "all" || todo.category === filterCategory)
     .filter((todo) => filterTag === "all" || todo.tags?.includes(filterTag))
-    .filter(matchesSearch);
+    .filter(matchesSearch)
+    .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime());
 
   // Create handlers object for TaskCard
   const taskCardHandlers = {
@@ -270,6 +297,16 @@ export default function Home() {
                 ))}
               </select>
             )}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className={`px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${darkMode ? "bg-gray-700 border-gray-600 text-white" : "border-gray-300"}`}
+            >
+              <option value="manual">Sort: Manual</option>
+              <option value="dueDate">Sort: Due Date</option>
+              <option value="priority">Sort: Priority</option>
+              <option value="created">Sort: Newest</option>
+            </select>
             {(filterCategory !== "all" || filterTag !== "all" || searchQuery) && (
               <button
                 onClick={() => { setFilterCategory("all"); setFilterTag("all"); setSearchQuery(""); }}
