@@ -10,6 +10,7 @@ import { ArchiveView } from "./components/ArchiveView";
 import { StatsModal } from "./components/StatsModal";
 import { ExportModal } from "./components/ExportModal";
 import { UndoToast } from "./components/UndoToast";
+import { ErrorBoundary, TaskErrorFallback, ModalErrorFallback } from "./components/ErrorBoundary";
 
 type SortOption = "manual" | "dueDate" | "priority" | "created";
 
@@ -253,7 +254,9 @@ export default function Home() {
             </button>
           </div>
 
-          <TaskInput onAddTodo={todoState.addTodo} darkMode={darkMode} />
+          <ErrorBoundary>
+            <TaskInput onAddTodo={todoState.addTodo} darkMode={darkMode} />
+          </ErrorBoundary>
 
           {/* Search and filter */}
           <div className="flex gap-2 items-center flex-wrap mb-6">
@@ -336,6 +339,9 @@ export default function Home() {
           </div>
 
           {/* Archive View */}
+          <ErrorBoundary
+            fallback={<TaskErrorFallback darkMode={darkMode} onRetry={() => window.location.reload()} />}
+          >
           {showArchive ? (
             <ArchiveView
               todos={todoState.todos
@@ -460,6 +466,7 @@ export default function Home() {
               )}
             </div>
           )}
+          </ErrorBoundary>
 
           {/* Documentation / Tips */}
           <div className={`mt-8 pt-6 border-t ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
@@ -494,13 +501,17 @@ export default function Home() {
       </div>
 
       {/* Export/Import Modal */}
-      <ExportModal
-        isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        todos={todoState.todos}
-        onImport={todoState.importFromJSON}
-        darkMode={darkMode}
-      />
+      <ErrorBoundary
+        fallback={showExportModal ? <ModalErrorFallback darkMode={darkMode} onClose={() => setShowExportModal(false)} /> : null}
+      >
+        <ExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          todos={todoState.todos}
+          onImport={todoState.importFromJSON}
+          darkMode={darkMode}
+        />
+      </ErrorBoundary>
 
       {/* Undo Delete Toast */}
       {todoState.showUndoToast && todoState.deletedTodo && (
@@ -513,12 +524,16 @@ export default function Home() {
       )}
 
       {/* Statistics Modal */}
-      <StatsModal
-        isOpen={showStatsModal}
-        onClose={() => setShowStatsModal(false)}
-        stats={todoState.getStats()}
-        darkMode={darkMode}
-      />
+      <ErrorBoundary
+        fallback={showStatsModal ? <ModalErrorFallback darkMode={darkMode} onClose={() => setShowStatsModal(false)} /> : null}
+      >
+        <StatsModal
+          isOpen={showStatsModal}
+          onClose={() => setShowStatsModal(false)}
+          stats={todoState.getStats()}
+          darkMode={darkMode}
+        />
+      </ErrorBoundary>
     </div>
   );
 }
