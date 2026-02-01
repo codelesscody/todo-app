@@ -45,6 +45,12 @@ export default function Home() {
     localStorage.setItem("darkMode", darkMode.toString());
   }, [darkMode]);
 
+  // Update page title with task count
+  useEffect(() => {
+    const activeCount = todoState.todos.filter((t) => !t.completed).length;
+    document.title = activeCount > 0 ? `(${activeCount}) Todo List` : "Todo List";
+  }, [todoState.todos]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
